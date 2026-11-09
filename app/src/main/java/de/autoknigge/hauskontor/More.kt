@@ -57,6 +57,17 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
     var houseDialog by remember { mutableStateOf(false) }
     val d = vm.data
 
+    val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { u ->
+        if (u != null) {
+            try {
+                val f = Backup.write(ctx, vm.store, vm.data)
+                ctx.contentResolver.openOutputStream(u)?.use { o -> f.inputStream().use { it.copyTo(o) } }
+                importMsg = "Sicherung gespeichert."
+            } catch (e: Exception) {
+                importMsg = "Speichern hat nicht geklappt."
+            }
+        }
+    }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
         if (u != null) {
             val l = Backup.read(ctx, u)
@@ -86,7 +97,8 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
 
         HCard("Sicherung und Export", bg = O7, dark = true) {
             Hint("Deine Daten liegen nur auf diesem Gerät. Mit der Sicherung (ZIP, mit Fotos) ziehst du auf ein neues Telefon um: Datei übertragen und dort einlesen.")
-            CardTextButton(onClick = { shareFile(ctx, Backup.write(ctx, vm.store, vm.data), "application/zip") }) { Text("Sicherung erstellen und teilen") }
+            CardTextButton(onClick = { saveFile.launch("Hauskontor-Sicherung.zip") }) { Text("Sicherung auf dem Gerät speichern") }
+            CardTextButton(onClick = { shareFile(ctx, Backup.write(ctx, vm.store, vm.data), "application/zip") }) { Text("Sicherung senden an … (WhatsApp, Mail, Quick Share, Bluetooth)") }
             CardTextButton(onClick = { openFile.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }) { Text("Sicherung einlesen") }
             importMsg?.let { Hint(it) }
             CardTextButton(onClick = { shareText(ctx, "Hauskontor.csv", "text/csv", Calc.csv(vm.data)) }) { Text("Haushaltsbuch und Zählerstände als CSV teilen (Excel)") }

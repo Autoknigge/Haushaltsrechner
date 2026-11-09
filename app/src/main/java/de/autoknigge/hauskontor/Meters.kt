@@ -128,6 +128,11 @@ private fun MeterDetail(vm: MainViewModel, m: Meter, onBack: () -> Unit, onEditR
             Text(m.name, fontSize = 18.sp, color = Ink, modifier = Modifier.weight(1f))
         }
         Button(onClick = onNewReading) { Text("+ Neue Ablesung") }
+        when (m.type) {
+            MeterType.STROM -> PartnerButton(Partner.STROM)
+            MeterType.GAS -> PartnerButton(Partner.GAS)
+            else -> {}
+        }
         if (rs.size >= 2) {
             HCard("Verbrauch je Ablesezeitraum (" + m.type.unit + ")", bg = O8, dark = true) {
                 val deltas = rs.zipWithNext { a, b -> b.value - a.value }.takeLast(12)

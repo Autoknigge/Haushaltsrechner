@@ -127,6 +127,10 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             }
         }
 
+        HCard("Tarife vergleichen und sparen", bg = O9, dark = true) {
+            Partner.values().forEach { PartnerButton(it) }
+        }
+
         HCard("Jahresverlauf $year", bg = TileTomorrow) {
             val months = (1..12).map { m -> Calc.sum(Calc.monthLines(d, YearMonth.of(year, m))).expense }
             val max = (months.maxOrNull() ?: 0L).coerceAtLeast(1L)
