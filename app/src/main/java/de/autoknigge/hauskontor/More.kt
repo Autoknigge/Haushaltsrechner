@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -57,6 +58,23 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
     var houseDialog by remember { mutableStateOf(false) }
     val d = vm.data
 
+    var wgCode by remember { mutableStateOf(Wg.code(ctx)) }
+    var wgDialog by remember { mutableStateOf(false) }
+    var wgMsg by remember { mutableStateOf<String?>(null) }
+    val wgOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
+        if (u != null) {
+            when (val r = Wg.read(ctx, u, wgCode)) {
+                is Wg.Result.Ok -> {
+                    val before = vm.data.entries.size + vm.data.recurrings.size + vm.data.meters.size + vm.data.readings.size
+                    vm.importBackup(Backup.Loaded(r.data, emptyMap()), replace = false)
+                    val after = vm.data.entries.size + vm.data.recurrings.size + vm.data.meters.size + vm.data.readings.size
+                    wgMsg = if (after > before) "Abgleich fertig: " + (after - before) + " neue Einträge übernommen." else "Abgleich fertig: du bist schon auf dem gleichen Stand."
+                }
+                Wg.Result.WrongCode -> wgMsg = "Die Datei gehört nicht zu deiner WG (anderer WG-Code) oder ist beschädigt. Es wurde nichts übernommen."
+                Wg.Result.NotWg -> wgMsg = "Das ist keine WG-Abgleichsdatei von Hauskontor (.hkwg)."
+            }
+        }
+    }
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { u ->
         if (u != null) {
             try {
@@ -102,6 +120,21 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
             CardTextButton(onClick = { openFile.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }) { Text("Sicherung einlesen") }
             importMsg?.let { Hint(it) }
             CardTextButton(onClick = { shareText(ctx, "Hauskontor.csv", "text/csv", Calc.csv(vm.data)) }) { Text("Haushaltsbuch und Zählerstände als CSV teilen (Excel)") }
+        }
+
+        HCard("WG-Abgleich", bg = CardGreen, dark = true) {
+            Hint("Alle Mitbewohner nutzen denselben WG-Code. Die Abgleichsdatei ist damit verschlüsselt: Nur wer den Code kennt, kann sie lesen. Ihr schickt sie euch per WhatsApp, Quick Share, Bluetooth oder Mail. Es gibt keinen Server, die Daten bleiben bei euch.")
+            if (wgCode.isBlank()) {
+                CardTextButton(onClick = { Wg.newCode().also { Wg.setCode(ctx, it); wgCode = it } }) { Text("Neuen WG-Code erzeugen") }
+                CardTextButton(onClick = { wgDialog = true }) { Text("WG-Code von einem Mitbewohner eingeben") }
+            } else {
+                Row2("WG-Code", wgCode, sub = "Gib ihn nur an Mitbewohner weiter, am besten persönlich.")
+                CardTextButton(onClick = { shareFile(ctx, Wg.write(ctx, vm.data, wgCode), "application/octet-stream") }) { Text("Abgleichsdatei senden an …") }
+                CardTextButton(onClick = { wgOpen.launch(arrayOf("*/*")) }) { Text("Abgleichsdatei einlesen") }
+                CardTextButton(onClick = { wgDialog = true }) { Text("WG-Code ändern oder entfernen") }
+            }
+            wgMsg?.let { Hint(it) }
+            Hint("Beim Abgleich werden neue Buchungen, Fixkosten, Zähler und Ablesungen ergänzt. Bereits vorhandene Einträge und Fotos bleiben unverändert, Löschungen werden nicht übertragen.")
         }
 
         HCard("Werbung", bg = O8, dark = true) {
@@ -152,6 +185,28 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
                 }
             },
             dismissButton = { TextButton(onClick = { loaded = null }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (wgDialog) {
+        var c by remember { mutableStateOf(wgCode) }
+        val ok = Wg.valid(Wg.normalize(c))
+        AlertDialog(
+            onDismissRequest = { wgDialog = false },
+            title = { Text("WG-Code") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = c, onValueChange = { c = it }, label = { Text("z. B. K7MQ-4XPD-92HB") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("Der Code besteht aus 12 Zeichen (Buchstaben und Ziffern).", fontSize = 12.sp)
+                }
+            },
+            confirmButton = { TextButton(enabled = ok, onClick = { Wg.setCode(ctx, c); wgCode = Wg.code(ctx); wgDialog = false; wgMsg = null }) { Text("Speichern") } },
+            dismissButton = {
+                Row {
+                    if (wgCode.isNotBlank()) TextButton(onClick = { Wg.setCode(ctx, ""); wgCode = ""; wgDialog = false; wgMsg = null }) { Text("Entfernen", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { wgDialog = false }) { Text("Abbrechen") }
+                }
+            }
         )
     }
 
