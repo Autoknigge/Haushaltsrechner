@@ -89,7 +89,6 @@ object Ocr {
             if (cont.isActive) cont.resume(null)
         }
     }
-    }
 
     /** Zahlen aus dem erkannten Text, die wie ein Zählerstand aussehen: 4 bis 8 Ziffern zuerst, dann nach Länge. */
     fun extract(text: String): List<String> {

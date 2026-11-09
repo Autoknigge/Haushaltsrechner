@@ -74,7 +74,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                 val found = Receipts.statement(s.rows)
                 val have = vm.data.entries
                 found.forEach { f ->
-                    val dup = have.any { it.date == f.date && it.cents == f.cents && it.title.equals(f.title, ignoreCase = true) }
+                    val dup = have.any { it.date == f.date && it.cents == f.cents }
                     rows.add(Row3(f, f.income, !dup, dup, Receipts.guessCategory(f.title, vm.data.rules), f.title))
                 }
                 statementMode = found.size >= 2
@@ -167,6 +167,8 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                                 (if (g.title.isNotBlank()) "\nBezeichnung: " + g.title else ""),
                             fontSize = 12.5.sp
                         )
+                        val gd = g.date ?: defaultDay
+                        if (picked != null && vm.data.entries.any { it.date == gd && it.cents == picked }) Text("Achtung: Eine Buchung mit gleichem Datum und Betrag gibt es schon. Bitte nicht doppelt anlegen.", fontSize = 12.5.sp)
                         Button(enabled = picked != null, onClick = {
                             val t = g.title
                             onDraft(Entry(vm.newId(), g.date ?: defaultDay, t, picked ?: 0L, Receipts.guessCategory(t, vm.data.rules), false, ""))
@@ -184,7 +186,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                                 Checkbox(checked = r.checked, onCheckedChange = { rows[i] = r.copy(checked = it) })
                                 Column(Modifier.weight(1f).clickable { editing = i }) {
                                     Text(r.title.ifBlank { "(ohne Text)" }, fontSize = 13.sp, maxLines = 2)
-                                    Text(Calc.dateText(r.found.date) + (if (r.dup) " · schon vorhanden" else ""), fontSize = 11.sp)
+                                    Text(Calc.dateText(r.found.date) + (if (r.dup) " · schon vorhanden (gleiches Datum und gleicher Betrag, wird nicht doppelt gezählt)" else ""), fontSize = 11.sp)
                                     if (!r.income) Text("→ " + r.cat.label + "  ✎", fontSize = 12.sp)
                                 }
                                 Text((if (r.income) "+ " else "− ") + Calc.eur(r.found.cents), fontSize = 13.sp)
