@@ -227,3 +227,17 @@ fun CardOutlinedButton(onClick: () -> Unit, content: @Composable () -> Unit) {
         border = BorderStroke(1.dp, LocalInk.current)
     ) { content() }
 }
+
+
+/** Eingabefeld für eine Kategorie: frei tippen (✕ leert das Feld) oder eine bekannte Kategorie antippen. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CategoryField(label: String, value: String, options: List<String>, onChange: (String) -> Unit) {
+    androidx.compose.material3.OutlinedTextField(
+        value = value, onValueChange = onChange, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        trailingIcon = { if (value.isNotEmpty()) TextButton(onClick = { onChange("") }) { Text("✕", fontSize = 16.sp) } }
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { o -> FilterChip(selected = o.equals(value.trim(), ignoreCase = true), onClick = { onChange(o) }, label = { Text(o) }) }
+    }
+}

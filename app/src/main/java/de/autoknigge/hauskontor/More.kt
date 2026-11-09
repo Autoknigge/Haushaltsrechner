@@ -124,8 +124,8 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
 
         if (d.rules.isNotEmpty()) {
             HCard("Gelernte Zuordnungen", bg = O9, dark = true) {
-                Hint("Diese Stichwörter hat die App aus deinen Korrekturen gelernt. Antippen entfernt eine Zuordnung.")
-                d.rules.forEach { r -> Row2(r.key, r.category.label + "  ✕", onClick = { vm.setRules(d.rules - r) }) }
+                Hint("Diese Namen hat die App aus deinen Buchungen gelernt und ordnet sie automatisch zu, bis du sie änderst. Antippen entfernt eine Zuordnung.")
+                d.rules.forEach { r -> Row2(r.key, r.category + (if (r.income) " (Einnahme)" else "") + "  ✕", onClick = { vm.setRules(d.rules - r) }) }
             }
         }
 

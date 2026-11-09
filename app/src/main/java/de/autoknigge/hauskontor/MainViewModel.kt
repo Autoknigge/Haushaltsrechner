@@ -21,15 +21,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newId(): String = UUID.randomUUID().toString()
 
-    fun saveEntry(e: Entry) = commit(
-        data.copy(entries = if (data.entries.any { it.id == e.id }) data.entries.map { if (it.id == e.id) e else it } else data.entries + e)
-    )
+    fun saveEntry(e: Entry) {
+        commit(data.copy(entries = if (data.entries.any { it.id == e.id }) data.entries.map { if (it.id == e.id) e else it } else data.entries + e))
+        learnFrom(e.title, if (e.income) (e.incomeKind ?: IncomeKind.SONSTIGES).label else e.category.label, e.income)
+    }
 
     fun deleteEntry(id: String) = commit(data.copy(entries = data.entries.filter { it.id != id }))
 
-    fun saveRecurring(r: Recurring) = commit(
-        data.copy(recurrings = if (data.recurrings.any { it.id == r.id }) data.recurrings.map { if (it.id == r.id) r else it } else data.recurrings + r)
-    )
+    fun saveRecurring(r: Recurring) {
+        commit(data.copy(recurrings = if (data.recurrings.any { it.id == r.id }) data.recurrings.map { if (it.id == r.id) r else it } else data.recurrings + r))
+        learnFrom(r.title, if (r.income) (r.incomeKind ?: IncomeKind.SONSTIGES).label else r.category.label, r.income)
+    }
+
+    /** Merkt sich, welcher Name zu welcher Kategorie gehört. Gilt, bis du es änderst. */
+    private fun learnFrom(title: String, category: String, income: Boolean) {
+        val key = Receipts.keyOf(title)
+        if (key.length < 3) return
+        val have = data.rules.firstOrNull { it.key == key && it.income == income }
+        val plain = category == Category.SONSTIGES.label || category == IncomeKind.SONSTIGES.label
+        if (have == null && plain) return
+        if (have?.category == category) return
+        learn(listOf(Rule(key, category, income)))
+    }
 
     fun deleteRecurring(id: String) = commit(data.copy(recurrings = data.recurrings.filter { it.id != id }))
 
@@ -73,8 +86,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Merkt neue Zuordnungen; ein gleiches Stichwort wird überschrieben. */
     fun learn(new: List<Rule>) {
         if (new.isEmpty()) return
-        val keys = new.map { it.key }.toSet()
-        commit(data.copy(rules = data.rules.filter { it.key !in keys } + new))
+        val ids = new.map { it.key + it.income }.toSet()
+        commit(data.copy(rules = data.rules.filter { (it.key + it.income) !in ids } + new))
     }
 
     fun setSplit(mode: SplitMode) = commit(data.copy(split = mode))

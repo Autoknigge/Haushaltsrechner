@@ -78,13 +78,27 @@ object Receipts {
     /** Zuordnung einer Kategorie: zuerst die gelernten Regeln, dann grobe Stichwörter. */
     fun guessCategory(title: String, rules: List<Rule> = emptyList()): Category {
         val t = title.lowercase()
-        rules.firstOrNull { it.key.isNotBlank() && t.contains(it.key.lowercase()) }?.let { return it.category }
+        rules.firstOrNull { !it.income && it.key.isNotBlank() && t.contains(it.key.lowercase()) }?.let { return Category(it.category) }
         return when {
             listOf("versicherung", "allianz", "huk", "axa", "ergo").any { t.contains(it) } -> Category.VERSICHERUNG
             listOf("grundsteuer", "müll", "abwasser", "stadtwerke", "schornstein", "wasser", "strom", "energie", "heizung", "fernwärme", "erdgas").any { t.contains(it) } -> Category.NEBENKOSTEN
             listOf("rewe", "edeka", "aldi", "lidl", "penny", "netto", "dm ", "rossmann", "kaufland", "markt").any { t.contains(it) } -> Category.EINKAUF
             listOf("lastschrift", "abbuchung", "dauerauftrag", "miete", "rundfunk", "telekom", "vodafone").any { t.contains(it) } -> Category.ABBUCHUNG
             else -> Category.SONSTIGES
+        }
+    }
+
+    /** Einnahme-Kategorie: zuerst gelernte Regeln, dann Stichwörter. */
+    fun guessIncome(title: String, rules: List<Rule> = emptyList()): IncomeKind {
+        val t = title.lowercase()
+        rules.firstOrNull { it.income && it.key.isNotBlank() && t.contains(it.key.lowercase()) }?.let { return IncomeKind(it.category) }
+        return when {
+            listOf("kindergeld", "familienkasse").any { t.contains(it) } -> IncomeKind.KINDERGELD
+            listOf("gehalt", "lohn", "bezüge", "besoldung").any { t.contains(it) } -> IncomeKind.LOHN
+            listOf("rente", "pension", "versorgung").any { t.contains(it) } -> IncomeKind.RENTE
+            listOf("zins", "dividende", "ertrag").any { t.contains(it) } -> IncomeKind.ZINSEN
+            listOf("miete", "mieter").any { t.contains(it) } -> IncomeKind.MIETE
+            else -> IncomeKind.SONSTIGES
         }
     }
 

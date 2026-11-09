@@ -62,6 +62,9 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
     val persons = vm.data.persons
     var editing by remember { mutableStateOf<Int?>(null) }
 
+    fun guessFor(t: String, inc: Boolean): Category =
+        if (inc) Category(Receipts.guessIncome(t, vm.data.rules).label) else Receipts.guessCategory(t, vm.data.rules)
+
     fun process(uri: Uri) {
         scope.launch {
             busy = true
@@ -75,7 +78,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                 val have = vm.data.entries
                 found.forEach { f ->
                     val dup = have.any { it.date == f.date && it.cents == f.cents }
-                    rows.add(Row3(f, f.income, !dup, dup, Receipts.guessCategory(f.title, vm.data.rules), f.title))
+                    rows.add(Row3(f, f.income, !dup, dup, guessFor(f.title, f.income), f.title))
                 }
                 statementMode = found.size >= 2
                 picked = null
@@ -103,10 +106,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                 text = {
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Text") }, modifier = Modifier.fillMaxWidth())
-                        Text("Kategorie", fontSize = 12.sp)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Category.values().forEach { x -> FilterChip(selected = c == x, onClick = { c = x }, label = { Text(x.label) }) }
-                        }
+                        CategoryField(if (r.income) "Kategorie der Einnahme" else "Kategorie", c.label, (if (r.income) vm.data.incomeCategories().map { it.label } else vm.data.expenseCategories().map { it.label })) { c = Category(it) }
                         OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Stichwort merken (z. B. oowv)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Text("Taucht das Stichwort künftig in einer Zahlung auf, schlägt die App diese Kategorie vor. Leer lassen = nichts merken.", fontSize = 12.sp)
                     }
@@ -114,8 +114,8 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                 confirmButton = {
                     TextButton(onClick = {
                         val same = rows.indices.filter { j -> j != i && k.isNotBlank() && rows[j].title.lowercase().contains(k.trim().lowercase()) }
-                        rows[i] = r.copy(title = t, cat = c, rule = k.trim())
-                        same.forEach { j -> rows[j] = rows[j].copy(cat = c) }
+                        rows[i] = r.copy(title = t, cat = Category(c.label.trim().ifBlank { Category.SONSTIGES.label }), rule = k.trim())
+                        same.filter { j -> rows[j].income == r.income }.forEach { j -> rows[j] = rows[j].copy(cat = c) }
                         editing = null
                     }) { Text("Übernehmen") }
                 },
@@ -187,10 +187,10 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                                 Column(Modifier.weight(1f).clickable { editing = i }) {
                                     Text(r.title.ifBlank { "(ohne Text)" }, fontSize = 13.sp, maxLines = 2)
                                     Text(Calc.dateText(r.found.date) + (if (r.dup) " · schon vorhanden (gleiches Datum und gleicher Betrag, wird nicht doppelt gezählt)" else ""), fontSize = 11.sp)
-                                    if (!r.income) Text("→ " + r.cat.label + "  ✎", fontSize = 12.sp)
+                                    Text("→ " + r.cat.label + "  ✎", fontSize = 12.sp)
                                 }
                                 Text((if (r.income) "+ " else "− ") + Calc.eur(r.found.cents), fontSize = 13.sp)
-                                TextButton(onClick = { rows[i] = r.copy(income = !r.income) }) { Text("±") }
+                                TextButton(onClick = { rows[i] = r.copy(income = !r.income, cat = guessFor(r.title, !r.income)) }) { Text("±") }
                             }
                         }
                         Hint("Tippe auf eine Zeile, um Text oder Kategorie zu ändern. Die App merkt sich die Zuordnung für den nächsten Scan.")
@@ -206,12 +206,12 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
             val chosen = rows.filter { it.checked }
             if (scan != null && statementMode && chosen.isNotEmpty()) {
                 TextButton(onClick = {
-                    vm.learn(chosen.filter { !it.income && it.rule.isNotBlank() }.map { Rule(it.rule.trim().lowercase(), it.cat) })
+                    vm.learn(chosen.filter { it.rule.isNotBlank() }.map { Rule(it.rule.trim().lowercase(), it.cat.label, it.income) })
                     vm.saveEntries(chosen.map { r ->
                         Entry(
                             vm.newId(), r.found.date, r.title, r.found.cents,
                             if (r.income) Category.SONSTIGES else r.cat,
-                            r.income, "per Foto importiert", payer, if (r.income) IncomeKind.SONSTIGES else null
+                            r.income, "per Foto importiert", payer, if (r.income) IncomeKind(r.cat.label) else null
                         )
                     })
                     onDone()

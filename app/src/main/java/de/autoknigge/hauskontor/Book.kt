@@ -125,6 +125,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
         EntryDialog(
             initial = entryDialog ?: draft,
             isNew = isNew,
+            data = d,
             persons = d.persons,
             defaultDay = defaultDay,
             newId = vm::newId,
@@ -136,6 +137,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
     if (newRec || recDialog != null) {
         RecurringDialog(
             initial = recDialog,
+            data = d,
             persons = d.persons,
             newId = vm::newId,
             onSave = { vm.saveRecurring(it); newRec = false; recDialog = null },
@@ -155,15 +157,16 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
 
 @Composable
 private fun EntryDialog(
-    initial: Entry?, isNew: Boolean, persons: List<Person>, defaultDay: Long, newId: () -> String,
+    initial: Entry?, isNew: Boolean, data: Data, persons: List<Person>, defaultDay: Long, newId: () -> String,
     onSave: (Entry) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit
 ) {
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var amount by remember { mutableStateOf(initial?.let { Calc.centsText(it.cents) } ?: "") }
     var date by remember { mutableStateOf(initial?.date ?: defaultDay) }
-    var cat by remember { mutableStateOf(initial?.category ?: Category.EINKAUF) }
+    var cat by remember { mutableStateOf((initial?.category ?: Category.EINKAUF).label) }
+    var touched by remember { mutableStateOf(initial != null) }
     var income by remember { mutableStateOf(initial?.income ?: false) }
-    var kind by remember { mutableStateOf(initial?.incomeKind ?: IncomeKind.LOHN) }
+    var kind by remember { mutableStateOf((initial?.incomeKind ?: IncomeKind.LOHN).label) }
     var person by remember { mutableStateOf(initial?.personId) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     val id = remember { initial?.id ?: newId() }
@@ -173,7 +176,11 @@ private fun EntryDialog(
         title = { Text(if (isNew) "Neue Buchung" else "Buchung ändern") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Bezeichnung (z. B. Supermarkt)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = title, onValueChange = { title = it
+                    if (!touched) {
+                        if (income) kind = Receipts.guessIncome(it, data.rules).label
+                        else Receipts.guessCategory(it, data.rules).let { g -> if (g != Category.SONSTIGES) cat = g.label }
+                    } }, label = { Text("Bezeichnung (z. B. Supermarkt)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = amount, onValueChange = { amount = it }, label = { Text("Betrag in Euro") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth()
@@ -184,11 +191,9 @@ private fun EntryDialog(
                     Switch(checked = income, onCheckedChange = { income = it })
                 }
                 if (income) {
-                    Text("Quelle", fontSize = 12.sp)
-                    Choice(IncomeKind.values().toList(), kind, { it.label }) { kind = it }
+                    CategoryField("Kategorie der Einnahme (z. B. Kindergeld)", kind, data.incomeCategories().map { it.label }) { kind = it; touched = true }
                 } else {
-                    Text("Kategorie", fontSize = 12.sp)
-                    Choice(Category.values().toList(), cat, { it.label }) { cat = it }
+                    CategoryField("Kategorie (z. B. Einkauf, Hobby)", cat, data.expenseCategories().map { it.label }) { cat = it; touched = true }
                 }
                 PersonChoice(persons, if (income) "Wessen Einnahme?" else "Wer hat gezahlt?", person) { person = it }
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Notiz (optional)") }, modifier = Modifier.fillMaxWidth())
@@ -197,7 +202,7 @@ private fun EntryDialog(
         },
         confirmButton = {
             TextButton(enabled = cents != null && cents > 0, onClick = {
-                onSave(Entry(id, date, title.trim(), cents ?: 0L, if (income) Category.SONSTIGES else cat, income, note.trim(), person, if (income) kind else null))
+                onSave(Entry(id, date, title.trim(), cents ?: 0L, if (income) Category.SONSTIGES else Category(cat.trim().ifBlank { Category.SONSTIGES.label }), income, note.trim(), person, if (income) IncomeKind(kind.trim().ifBlank { IncomeKind.SONSTIGES.label }) else null))
             }) { Text("Speichern") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
@@ -211,7 +216,7 @@ private val presets = listOf(
     Preset("Rente", Category.SONSTIGES, Interval.MONTHLY, true, IncomeKind.RENTE),
     Preset("Zinsen / Dividende", Category.SONSTIGES, Interval.QUARTERLY, true, IncomeKind.ZINSEN),
     Preset("Mieteinnahmen", Category.SONSTIGES, Interval.MONTHLY, true, IncomeKind.MIETE),
-    Preset("Kindergeld", Category.SONSTIGES, Interval.MONTHLY, true, IncomeKind.SONSTIGES),
+    Preset("Kindergeld", Category.SONSTIGES, Interval.MONTHLY, true, IncomeKind.KINDERGELD),
     Preset("Grundsteuer", Category.NEBENKOSTEN, Interval.QUARTERLY),
     Preset("Müllgebühren", Category.NEBENKOSTEN, Interval.QUARTERLY),
     Preset("Abwasser / Niederschlagswasser", Category.NEBENKOSTEN, Interval.YEARLY),
@@ -229,12 +234,13 @@ private val presets = listOf(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RecurringDialog(initial: Recurring?, persons: List<Person>, newId: () -> String, onSave: (Recurring) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+private fun RecurringDialog(initial: Recurring?, data: Data, persons: List<Person>, newId: () -> String, onSave: (Recurring) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var amount by remember { mutableStateOf(initial?.let { Calc.centsText(it.cents) } ?: "") }
-    var cat by remember { mutableStateOf(initial?.category ?: Category.FIXKOSTEN) }
+    var cat by remember { mutableStateOf((initial?.category ?: Category.FIXKOSTEN).label) }
+    var touched by remember { mutableStateOf(initial != null) }
     var income by remember { mutableStateOf(initial?.income ?: false) }
-    var kind by remember { mutableStateOf(initial?.incomeKind ?: IncomeKind.LOHN) }
+    var kind by remember { mutableStateOf((initial?.incomeKind ?: IncomeKind.LOHN).label) }
     var person by remember { mutableStateOf(initial?.personId) }
     var interval by remember { mutableStateOf(initial?.interval ?: Interval.MONTHLY) }
     var start by remember { mutableStateOf(initial?.start ?: LocalDate.now().toEpochDay()) }
@@ -252,8 +258,8 @@ private fun RecurringDialog(initial: Recurring?, persons: List<Person>, newId: (
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         presets.forEach { p ->
                             AssistChip(onClick = {
-                                title = p.title; cat = p.cat; interval = p.interval; income = p.income
-                                if (p.kind != null) kind = p.kind
+                                title = p.title; cat = p.cat.label; interval = p.interval; income = p.income; touched = true
+                                if (p.kind != null) kind = p.kind.label
                             }, label = { Text(p.title, fontSize = 12.sp) })
                         }
                     }
@@ -262,7 +268,11 @@ private fun RecurringDialog(initial: Recurring?, persons: List<Person>, newId: (
                     Text("Einnahme (z. B. Gehalt)", fontSize = 14.sp, modifier = Modifier.weight(1f))
                     Switch(checked = income, onCheckedChange = { income = it })
                 }
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Bezeichnung") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = title, onValueChange = { title = it
+                    if (!touched) {
+                        if (income) kind = Receipts.guessIncome(it, data.rules).label
+                        else Receipts.guessCategory(it, data.rules).let { g -> if (g != Category.SONSTIGES) cat = g.label }
+                    } }, label = { Text("Bezeichnung") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = amount, onValueChange = { amount = it }, label = { Text("Betrag je Zahlung in Euro") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth()
@@ -271,11 +281,9 @@ private fun RecurringDialog(initial: Recurring?, persons: List<Person>, newId: (
                 Choice(Interval.values().toList(), interval, { it.label }) { interval = it }
                 DateField("Erste Fälligkeit", start) { start = it }
                 if (income) {
-                    Text("Quelle", fontSize = 12.sp)
-                    Choice(IncomeKind.values().toList(), kind, { it.label }) { kind = it }
+                    CategoryField("Kategorie der Einnahme (z. B. Kindergeld)", kind, data.incomeCategories().map { it.label }) { kind = it; touched = true }
                 } else {
-                    Text("Kategorie", fontSize = 12.sp)
-                    Choice(Category.values().filter { it != Category.EINKAUF }, cat, { it.label }) { cat = it }
+                    CategoryField("Kategorie (z. B. Fixkosten, Strom)", cat, data.expenseCategories().map { it.label }) { cat = it; touched = true }
                 }
                 PersonChoice(persons, if (income) "Wessen Einnahme?" else "Wer zahlt?", person) { person = it }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -291,8 +299,8 @@ private fun RecurringDialog(initial: Recurring?, persons: List<Person>, newId: (
             TextButton(enabled = cents != null && cents > 0 && title.isNotBlank(), onClick = {
                 onSave(
                     Recurring(
-                        initial?.id ?: newId(), title.trim(), cents ?: 0L, if (income) Category.SONSTIGES else cat, interval, start,
-                        if (hasEnd) end else null, note.trim(), income, if (income) kind else null, person
+                        initial?.id ?: newId(), title.trim(), cents ?: 0L, if (income) Category.SONSTIGES else Category(cat.trim().ifBlank { Category.SONSTIGES.label }), interval, start,
+                        if (hasEnd) end else null, note.trim(), income, if (income) IncomeKind(kind.trim().ifBlank { IncomeKind.SONSTIGES.label }) else null, person
                     )
                 )
             }) { Text("Speichern") }

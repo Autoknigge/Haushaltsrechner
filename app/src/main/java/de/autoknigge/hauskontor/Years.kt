@@ -246,13 +246,13 @@ private fun CompareView(d: Data) {
         }
         val money: (Double) -> String = { e0(Math.round(it)) }
         CmpRow("Ausgaben", sa.expense.toDouble(), sb.expense.toDouble(), money, true, true)
-        Category.values().forEach { c ->
+        (sa.byCategory.keys + sb.byCategory.keys).forEach { c ->
             val x = sa.byCategory[c] ?: 0L
             val y = sb.byCategory[c] ?: 0L
             if (x != 0L || y != 0L) CmpRow("  " + c.label, x.toDouble(), y.toDouble(), money, true)
         }
         CmpRow("Einnahmen", sa.income.toDouble(), sb.income.toDouble(), money, false, true)
-        IncomeKind.values().forEach { k ->
+        (sa.incomeByKind.keys + sb.incomeByKind.keys).forEach { k ->
             val x = sa.incomeByKind[k] ?: 0L
             val y = sb.incomeByKind[k] ?: 0L
             if (x != 0L || y != 0L) CmpRow("  " + k.label, x.toDouble(), y.toDouble(), money, false)

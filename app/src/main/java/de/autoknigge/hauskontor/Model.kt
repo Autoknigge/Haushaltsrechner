@@ -3,13 +3,34 @@ package de.autoknigge.hauskontor
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class Category(val label: String) {
-    FIXKOSTEN("Fixkosten"),
-    VERSICHERUNG("Versicherung"),
-    EINKAUF("Einkauf"),
-    ABBUCHUNG("Abbuchung"),
-    NEBENKOSTEN("Wohnnebenkosten"),
-    SONSTIGES("Sonstiges")
+/** Kategorie einer Ausgabe. Frei erweiterbar: jeder Name ist erlaubt. */
+@JvmInline
+value class Category(val label: String) {
+    val name: String get() = label
+
+    companion object {
+        val FIXKOSTEN = Category("Fixkosten")
+        val VERSICHERUNG = Category("Versicherung")
+        val EINKAUF = Category("Einkauf")
+        val ABBUCHUNG = Category("Abbuchung")
+        val NEBENKOSTEN = Category("Wohnnebenkosten")
+        val SONSTIGES = Category("Sonstiges")
+        val defaults = listOf(FIXKOSTEN, VERSICHERUNG, EINKAUF, ABBUCHUNG, NEBENKOSTEN, SONSTIGES)
+
+        /** Liest auch die alten Enum-Namen aus früheren Sicherungen. */
+        fun of(s: String?, fallback: Category): Category {
+            if (s.isNullOrBlank()) return fallback
+            return defaults.firstOrNull { it.label == s } ?: when (s) {
+                "FIXKOSTEN" -> FIXKOSTEN
+                "VERSICHERUNG" -> VERSICHERUNG
+                "EINKAUF" -> EINKAUF
+                "ABBUCHUNG" -> ABBUCHUNG
+                "NEBENKOSTEN" -> NEBENKOSTEN
+                "SONSTIGES" -> SONSTIGES
+                else -> Category(s)
+            }
+        }
+    }
 }
 
 enum class Interval(val label: String, val months: Int) {
@@ -19,12 +40,32 @@ enum class Interval(val label: String, val months: Int) {
     YEARLY("jährlich", 12)
 }
 
-enum class IncomeKind(val label: String) {
-    LOHN("Lohn / Gehalt"),
-    RENTE("Rente / Pension"),
-    ZINSEN("Zinsen / Dividende"),
-    MIETE("Mieteinnahmen"),
-    SONSTIGES("Sonstige Einnahmen")
+/** Kategorie (Quelle) einer Einnahme. Ebenfalls frei erweiterbar. */
+@JvmInline
+value class IncomeKind(val label: String) {
+    val name: String get() = label
+
+    companion object {
+        val LOHN = IncomeKind("Lohn / Gehalt")
+        val RENTE = IncomeKind("Rente / Pension")
+        val ZINSEN = IncomeKind("Zinsen / Dividende")
+        val MIETE = IncomeKind("Mieteinnahmen")
+        val KINDERGELD = IncomeKind("Kindergeld")
+        val SONSTIGES = IncomeKind("Sonstige Einnahmen")
+        val defaults = listOf(LOHN, RENTE, ZINSEN, MIETE, KINDERGELD, SONSTIGES)
+
+        fun of(s: String?, fallback: IncomeKind): IncomeKind {
+            if (s.isNullOrBlank()) return fallback
+            return defaults.firstOrNull { it.label == s } ?: when (s) {
+                "LOHN" -> LOHN
+                "RENTE" -> RENTE
+                "ZINSEN" -> ZINSEN
+                "MIETE" -> MIETE
+                "SONSTIGES" -> SONSTIGES
+                else -> IncomeKind(s)
+            }
+        }
+    }
 }
 
 enum class SplitMode(val label: String) {
@@ -74,9 +115,9 @@ data class Entry(
     companion object {
         fun fromJson(o: JSONObject) = Entry(
             o.getString("id"), o.getLong("date"), o.optString("title"), o.getLong("cents"),
-            enumOf(o.optString("category"), Category.SONSTIGES), o.optBoolean("income"), o.optString("note"),
+            Category.of(o.optString("category"), Category.SONSTIGES), o.optBoolean("income"), o.optString("note"),
             if (o.isNull("person")) null else o.optString("person"),
-            if (o.isNull("kind")) null else enumOf(o.optString("kind"), IncomeKind.SONSTIGES)
+            if (o.isNull("kind")) null else IncomeKind.of(o.optString("kind"), IncomeKind.SONSTIGES)
         )
     }
 }
@@ -103,10 +144,10 @@ data class Recurring(
     companion object {
         fun fromJson(o: JSONObject) = Recurring(
             o.getString("id"), o.optString("title"), o.getLong("cents"),
-            enumOf(o.optString("category"), Category.FIXKOSTEN), enumOf(o.optString("interval"), Interval.MONTHLY),
+            Category.of(o.optString("category"), Category.FIXKOSTEN), enumOf(o.optString("interval"), Interval.MONTHLY),
             o.getLong("start"), if (o.isNull("end")) null else o.getLong("end"), o.optString("note"),
             o.optBoolean("income"),
-            if (o.isNull("kind")) null else enumOf(o.optString("kind"), IncomeKind.SONSTIGES),
+            if (o.isNull("kind")) null else IncomeKind.of(o.optString("kind"), IncomeKind.SONSTIGES),
             if (o.isNull("person")) null else o.optString("person")
         )
     }
@@ -152,11 +193,15 @@ data class Reading(
     }
 }
 
-/** Gelernte Zuordnung: Taucht [key] im Text einer Zahlung auf, wird [category] vorgeschlagen. */
-data class Rule(val key: String, val category: Category) {
-    fun toJson(): JSONObject = JSONObject().put("key", key).put("category", category.name)
+/** Gelernte Zuordnung: Taucht [key] im Namen des Zahlers oder Empfängers auf, wird [category] vorgeschlagen. */
+data class Rule(val key: String, val category: String, val income: Boolean = false) {
+    fun toJson(): JSONObject = JSONObject().put("key", key).put("category", category).put("income", income)
     companion object {
-        fun fromJson(o: JSONObject) = Rule(o.getString("key"), enumOf(o.optString("category"), Category.SONSTIGES))
+        fun fromJson(o: JSONObject): Rule {
+            val inc = o.optBoolean("income")
+            val c = o.optString("category")
+            return Rule(o.getString("key"), if (inc) IncomeKind.of(c, IncomeKind.SONSTIGES).label else Category.of(c, Category.SONSTIGES).label, inc)
+        }
     }
 }
 
@@ -172,6 +217,16 @@ data class Data(
     val address: String = "",
     val rules: List<Rule> = emptyList()
 ) {
+    /** Alle bekannten Ausgaben-Kategorien: Vorgaben, gelernte und bereits benutzte. */
+    fun expenseCategories(): List<Category> =
+        (Category.defaults + rules.filter { !it.income }.map { Category(it.category) } +
+            entries.filter { !it.income }.map { it.category } + recurrings.filter { !it.income }.map { it.category }).distinct()
+
+    /** Alle bekannten Einnahme-Kategorien. */
+    fun incomeCategories(): List<IncomeKind> =
+        (IncomeKind.defaults + rules.filter { it.income }.map { IncomeKind(it.category) } +
+            entries.filter { it.income }.mapNotNull { it.incomeKind } + recurrings.filter { it.income }.mapNotNull { it.incomeKind }).distinct()
+
     fun toJson(): JSONObject = JSONObject()
         .put("version", 1)
         .put("entries", JSONArray().also { a -> entries.forEach { a.put(it.toJson()) } })
