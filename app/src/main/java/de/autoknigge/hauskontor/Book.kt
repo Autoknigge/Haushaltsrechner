@@ -114,7 +114,9 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                         onClick = { recDialog = r }
                     )
                 }
+                partnersFor(d.recurrings.filter { !it.income }.map { it.title to it.category }).forEach { PartnerButton(it) }
             }
+            if (partnersFor(d.recurrings.filter { !it.income }.map { it.title to it.category }).isNotEmpty()) PartnerNote()
         }
     }
 

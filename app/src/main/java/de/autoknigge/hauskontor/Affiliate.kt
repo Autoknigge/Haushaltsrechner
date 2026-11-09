@@ -44,12 +44,31 @@ fun PartnerButton(p: Partner) {
                 .background(Brush.verticalGradient(listOf(Color(0xFFFFE9A0), Color(0xFFE3B341), Color(0xFFB8860B))), shape)
                 .border(2.dp, Brush.verticalGradient(listOf(Color(0xFFFFF6D0), Color(0xFF8A6508))), shape)
                 .clickable { try { uri.openUri(p.url) } catch (_: Exception) {} }
-                .padding(horizontal = 16.dp, vertical = 13.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("★  " + p.label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B1D00), textAlign = TextAlign.Center)
+            Text("★  " + p.label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B1D00), textAlign = TextAlign.Center)
         }
-        Text("Werbepartner · Anzeige", fontSize = 10.5.sp, color = LocalMuted.current, modifier = Modifier.padding(top = 3.dp))
     }
+}
+
+/** Hinweis, einmal unten auf einer Seite, die Partnerlinks enthält. */
+@Composable
+fun PartnerNote() {
+    Text("★ Werbepartner: Mit ★ gekennzeichnete goldene Schaltflächen sind Partnerlinks (Anzeige).", fontSize = 11.sp, color = Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+}
+
+/** Passende Partner zu vorhandenen Zahlungen (Text und Kategorie). */
+fun partnersFor(items: List<Pair<String, Category>>): List<Partner> {
+    val out = LinkedHashSet<Partner>()
+    items.forEach { (title, cat) ->
+        val t = title.lowercase()
+        if (listOf("strom", "energie", "ewe", "vattenfall").any { t.contains(it) }) out.add(Partner.STROM)
+        if (listOf("gas", "heizung").any { t.contains(it) }) out.add(Partner.GAS)
+        if (listOf("dsl", "internet", "telekom", "vodafone", "1&1", "o2 ", "magenta", "glasfaser").any { t.contains(it) }) out.add(Partner.DSL)
+        if (listOf("handy", "mobil", "smartphone").any { t.contains(it) }) out.add(Partner.MOBIL)
+        if (cat == Category.VERSICHERUNG) { out.add(Partner.HAFTPFLICHT); out.add(Partner.HAUSRAT) }
+    }
+    return Partner.values().filter { it in out }
 }

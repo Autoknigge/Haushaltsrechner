@@ -87,12 +87,14 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
         }
 
         val fixed = lines.filter { it.fixed && !it.income }
+        val fixedPartners = partnersFor(fixed.map { it.title to it.category })
         if (fixed.isNotEmpty()) {
             HCard("Fixkosten und Abbuchungen in diesem Monat", bg = O6, dark = true) {
                 fixed.sortedBy { it.date }.forEach {
                     Row2(it.title, Calc.eur(it.cents), sub = String.format("%02d.%02d. · %s", it.date.dayOfMonth, it.date.monthValue, it.category.label))
                 }
                 Row2("Summe", Calc.eur(fixed.sumOf { it.cents }))
+                fixedPartners.filter { it != Partner.STROM && it != Partner.GAS }.forEach { PartnerButton(it) }
             }
         }
 
@@ -110,6 +112,8 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                 }
                 nk.groupBy { it.title }.forEach { (title, ls) -> Row2(title, Calc.eur(ls.sumOf { it.cents })) }
             }
+            PartnerButton(Partner.STROM)
+            PartnerButton(Partner.GAS)
         }
 
         if (d.meters.isNotEmpty()) {
@@ -125,10 +129,6 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                 }
                 Hint("Der Verbrauch zwischen zwei Ablesungen wird gleichmäßig auf die Tage verteilt. Die Kosten sind eine Schätzung und stehen nicht in den Ausgaben oben.")
             }
-        }
-
-        HCard("Tarife vergleichen und sparen", bg = O9, dark = true) {
-            Partner.values().forEach { PartnerButton(it) }
         }
 
         HCard("Jahresverlauf $year", bg = TileTomorrow) {
@@ -147,5 +147,6 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             }
             Hint("Ausgaben je Monat, einschließlich der fälligen Fixkosten. Der gewählte Monat ist hell.")
         }
+        PartnerNote()
     }
 }
