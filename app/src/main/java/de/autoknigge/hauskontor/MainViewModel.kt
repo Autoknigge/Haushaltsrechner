@@ -68,6 +68,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setHousehold(name: String, address: String) = commit(data.copy(household = name.trim(), address = address.trim()))
 
+    fun setRules(rules: List<Rule>) = commit(data.copy(rules = rules))
+
+    /** Merkt neue Zuordnungen; ein gleiches Stichwort wird überschrieben. */
+    fun learn(new: List<Rule>) {
+        if (new.isEmpty()) return
+        val keys = new.map { it.key }.toSet()
+        commit(data.copy(rules = data.rules.filter { it.key !in keys } + new))
+    }
+
     fun setSplit(mode: SplitMode) = commit(data.copy(split = mode))
 
     /** Spielt eine Sicherung ein: entweder alles ersetzen oder fehlende Einträge hinzufügen. */

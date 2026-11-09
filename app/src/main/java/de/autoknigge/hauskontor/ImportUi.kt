@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,7 +40,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
 
-private class Row3(val found: Found, var income: Boolean, var checked: Boolean, val dup: Boolean)
+private data class Row3(val found: Found, val income: Boolean, val checked: Boolean, val dup: Boolean, val cat: Category, val title: String, val rule: String = "")
 
 /**
  * Zahlungen aus dem Foto einer Rechnung, eines Kassenbons oder eines Kontoauszugs übernehmen.
@@ -59,6 +60,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
     var picked by remember { mutableStateOf<Long?>(null) }
     val rows = remember { mutableListOf<Row3>().toMutableStateList() }
     val persons = vm.data.persons
+    var editing by remember { mutableStateOf<Int?>(null) }
 
     fun process(uri: Uri) {
         scope.launch {
@@ -73,7 +75,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                 val have = vm.data.entries
                 found.forEach { f ->
                     val dup = have.any { it.date == f.date && it.cents == f.cents && it.title.equals(f.title, ignoreCase = true) }
-                    rows.add(Row3(f, f.income, !dup, dup))
+                    rows.add(Row3(f, f.income, !dup, dup, Receipts.guessCategory(f.title, vm.data.rules), f.title))
                 }
                 statementMode = found.size >= 2
                 picked = null
@@ -83,16 +85,51 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
     }
 
     val take = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) pending?.let { process(it) } }
+    val pickPdf = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) process(uri) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) process(uri) }
 
     val guess = remember(scan) { scan?.let { Receipts.receipt(it.text, it.rows) } }
+
+    editing?.let { i ->
+        val r = rows.getOrNull(i)
+        if (r == null) editing = null
+        else {
+            var t by remember(i) { mutableStateOf(r.title) }
+            var c by remember(i) { mutableStateOf(r.cat) }
+            var k by remember(i) { mutableStateOf(r.rule.ifBlank { Receipts.keyOf(r.title) }) }
+            AlertDialog(
+                onDismissRequest = { editing = null },
+                title = { Text("Zahlung bearbeiten") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Text") }, modifier = Modifier.fillMaxWidth())
+                        Text("Kategorie", fontSize = 12.sp)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Category.values().forEach { x -> FilterChip(selected = c == x, onClick = { c = x }, label = { Text(x.label) }) }
+                        }
+                        OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Stichwort merken (z. B. oowv)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Text("Taucht das Stichwort künftig in einer Zahlung auf, schlägt die App diese Kategorie vor. Leer lassen = nichts merken.", fontSize = 12.sp)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val same = rows.indices.filter { j -> j != i && k.isNotBlank() && rows[j].title.lowercase().contains(k.trim().lowercase()) }
+                        rows[i] = r.copy(title = t, cat = c, rule = k.trim())
+                        same.forEach { j -> rows[j] = rows[j].copy(cat = c) }
+                        editing = null
+                    }) { Text("Übernehmen") }
+                },
+                dismissButton = { TextButton(onClick = { editing = null }) { Text("Abbrechen") } }
+            )
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDone,
         title = { Text("Beleg oder Kontoauszug") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Fotografiere eine Rechnung, einen Kassenbon oder einen Kontoauszug. Die App liest Beträge und Datum und schlägt Buchungen vor. Alles bleibt auf deinem Gerät.", fontSize = 12.5.sp)
+                Text("Fotografiere eine Rechnung, einen Kassenbon oder einen Kontoauszug oder wähle ein PDF (z. B. Online-Kontoauszug). Die App liest Beträge und Datum und schlägt Buchungen vor. Alles bleibt auf deinem Gerät.", fontSize = 12.5.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
                         val dir = File(ctx.cacheDir, "aufnahmen").also { it.mkdirs() }
@@ -102,6 +139,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                         take.launch(u)
                     }) { Text("📷 Foto") }
                     OutlinedButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("Galerie") }
+                    OutlinedButton(onClick = { pickPdf.launch(arrayOf("application/pdf")) }) { Text("📄 PDF") }
                 }
                 if (busy) Text("Text wird gelesen …", fontSize = 13.sp)
                 if (failed) Text("Es wurde kein Text erkannt. Mache das Foto bei gutem Licht, gerade von oben und möglichst formatfüllend.", fontSize = 12.5.sp)
@@ -131,7 +169,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                         )
                         Button(enabled = picked != null, onClick = {
                             val t = g.title
-                            onDraft(Entry(vm.newId(), g.date ?: defaultDay, t, picked ?: 0L, Receipts.guessCategory(t), false, ""))
+                            onDraft(Entry(vm.newId(), g.date ?: defaultDay, t, picked ?: 0L, Receipts.guessCategory(t, vm.data.rules), false, ""))
                         }) { Text("Als Buchung öffnen") }
                     }
                 }
@@ -143,15 +181,17 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                         Text("Erkannte Zahlungen. Haken entfernen, was nicht übernommen werden soll. Mit „±“ wechselst du zwischen Ausgabe und Einnahme.", fontSize = 12.5.sp)
                         rows.forEachIndexed { i, r ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(checked = r.checked, onCheckedChange = { rows[i] = Row3(r.found, r.income, it, r.dup) })
-                                Column(Modifier.weight(1f).clickable { rows[i] = Row3(r.found, r.income, !r.checked, r.dup) }) {
-                                    Text(r.found.title.ifBlank { "(ohne Text)" }, fontSize = 13.sp, maxLines = 2)
+                                Checkbox(checked = r.checked, onCheckedChange = { rows[i] = r.copy(checked = it) })
+                                Column(Modifier.weight(1f).clickable { editing = i }) {
+                                    Text(r.title.ifBlank { "(ohne Text)" }, fontSize = 13.sp, maxLines = 2)
                                     Text(Calc.dateText(r.found.date) + (if (r.dup) " · schon vorhanden" else ""), fontSize = 11.sp)
+                                    if (!r.income) Text("→ " + r.cat.label + "  ✎", fontSize = 12.sp)
                                 }
                                 Text((if (r.income) "+ " else "− ") + Calc.eur(r.found.cents), fontSize = 13.sp)
-                                TextButton(onClick = { rows[i] = Row3(r.found, !r.income, r.checked, r.dup) }) { Text("±") }
+                                TextButton(onClick = { rows[i] = r.copy(income = !r.income) }) { Text("±") }
                             }
                         }
+                        Hint("Tippe auf eine Zeile, um Text oder Kategorie zu ändern. Die App merkt sich die Zuordnung für den nächsten Scan.")
                         if (persons.isNotEmpty()) {
                             Text("Wer hat gezahlt (für alle gewählten)?", fontSize = 12.sp)
                             Choice<String?>(listOf<String?>(null) + persons.map { it.id }, payer, { id -> persons.firstOrNull { it.id == id }?.name ?: "Gemeinsam" }) { payer = it }
@@ -164,10 +204,11 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
             val chosen = rows.filter { it.checked }
             if (scan != null && statementMode && chosen.isNotEmpty()) {
                 TextButton(onClick = {
+                    vm.learn(chosen.filter { !it.income && it.rule.isNotBlank() }.map { Rule(it.rule.trim().lowercase(), it.cat) })
                     vm.saveEntries(chosen.map { r ->
                         Entry(
-                            vm.newId(), r.found.date, r.found.title, r.found.cents,
-                            if (r.income) Category.SONSTIGES else Receipts.guessCategory(r.found.title),
+                            vm.newId(), r.found.date, r.title, r.found.cents,
+                            if (r.income) Category.SONSTIGES else r.cat,
                             r.income, "per Foto importiert", payer, if (r.income) IncomeKind.SONSTIGES else null
                         )
                     })

@@ -76,7 +76,8 @@ object Backup {
             persons,
             if (a.persons.isNotEmpty()) a.split else b.split,
             a.household.ifBlank { b.household },
-            a.address.ifBlank { b.address }
+            a.address.ifBlank { b.address },
+            add(a.rules, b.rules) { it.key }
         )
     }
 }

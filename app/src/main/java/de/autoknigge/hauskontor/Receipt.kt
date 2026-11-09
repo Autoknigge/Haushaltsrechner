@@ -75,15 +75,22 @@ object Receipts {
         return ReceiptGuess(amounts, date, title)
     }
 
-    /** Grobe Zuordnung einer Kategorie nach Stichwörtern im Text. */
-    fun guessCategory(title: String): Category {
+    /** Zuordnung einer Kategorie: zuerst die gelernten Regeln, dann grobe Stichwörter. */
+    fun guessCategory(title: String, rules: List<Rule> = emptyList()): Category {
         val t = title.lowercase()
+        rules.firstOrNull { it.key.isNotBlank() && t.contains(it.key.lowercase()) }?.let { return it.category }
         return when {
             listOf("versicherung", "allianz", "huk", "axa", "ergo").any { t.contains(it) } -> Category.VERSICHERUNG
-            listOf("grundsteuer", "müll", "abwasser", "stadtwerke", "schornstein").any { t.contains(it) } -> Category.NEBENKOSTEN
+            listOf("grundsteuer", "müll", "abwasser", "stadtwerke", "schornstein", "wasser", "strom", "energie", "heizung", "fernwärme", "erdgas").any { t.contains(it) } -> Category.NEBENKOSTEN
             listOf("rewe", "edeka", "aldi", "lidl", "penny", "netto", "dm ", "rossmann", "kaufland", "markt").any { t.contains(it) } -> Category.EINKAUF
-            listOf("lastschrift", "abbuchung", "dauerauftrag", "miete", "rundfunk", "telekom", "vodafone", "strom", "gas").any { t.contains(it) } -> Category.ABBUCHUNG
+            listOf("lastschrift", "abbuchung", "dauerauftrag", "miete", "rundfunk", "telekom", "vodafone").any { t.contains(it) } -> Category.ABBUCHUNG
             else -> Category.SONSTIGES
         }
     }
+
+    private val generic = setOf("lastschrift", "gutschrift", "überweisung", "ueberweisung", "dauerauftrag", "kartenzahlung", "sepa", "basislastschrift", "folgelastschrift", "entgelt", "abschluss", "referenz", "mandat", "rechnung", "zahlung", "gmbh", "ihre")
+
+    /** Vorschlag für ein Stichwort aus dem Buchungstext: das längste Wort ohne Zahlen, das nicht allgemein ist. */
+    fun keyOf(title: String): String =
+        title.lowercase().split(Regex("[^a-zäöüß]+")).filter { it.length >= 3 && it !in generic }.maxByOrNull { it.length } ?: ""
 }

@@ -122,6 +122,13 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
             CardTextButton(onClick = { shareText(ctx, "Hauskontor.csv", "text/csv", Calc.csv(vm.data)) }) { Text("Haushaltsbuch und Zählerstände als CSV teilen (Excel)") }
         }
 
+        if (d.rules.isNotEmpty()) {
+            HCard("Gelernte Zuordnungen", bg = O9, dark = true) {
+                Hint("Diese Stichwörter hat die App aus deinen Korrekturen gelernt. Antippen entfernt eine Zuordnung.")
+                d.rules.forEach { r -> Row2(r.key, r.category.label + "  ✕", onClick = { vm.setRules(d.rules - r) }) }
+            }
+        }
+
         HCard("WG-Abgleich", bg = CardGreen, dark = true) {
             Hint("Alle Mitbewohner nutzen denselben WG-Code. Die Abgleichsdatei ist damit verschlüsselt: Nur wer den Code kennt, kann sie lesen. Ihr schickt sie euch per WhatsApp, Quick Share, Bluetooth oder Mail. Es gibt keinen Server, die Daten bleiben bei euch.")
             if (wgCode.isBlank()) {

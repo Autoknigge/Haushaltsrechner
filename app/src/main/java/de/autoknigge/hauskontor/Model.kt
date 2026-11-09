@@ -152,6 +152,14 @@ data class Reading(
     }
 }
 
+/** Gelernte Zuordnung: Taucht [key] im Text einer Zahlung auf, wird [category] vorgeschlagen. */
+data class Rule(val key: String, val category: Category) {
+    fun toJson(): JSONObject = JSONObject().put("key", key).put("category", category.name)
+    companion object {
+        fun fromJson(o: JSONObject) = Rule(o.getString("key"), enumOf(o.optString("category"), Category.SONSTIGES))
+    }
+}
+
 /** Alle Daten der App. Sie liegen als eine JSON-Datei im App-Speicher. */
 data class Data(
     val entries: List<Entry> = emptyList(),
@@ -161,7 +169,8 @@ data class Data(
     val persons: List<Person> = emptyList(),
     val split: SplitMode = SplitMode.EQUAL,
     val household: String = "",
-    val address: String = ""
+    val address: String = "",
+    val rules: List<Rule> = emptyList()
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("version", 1)
@@ -173,6 +182,7 @@ data class Data(
         .put("split", split.name)
         .put("household", household)
         .put("address", address)
+        .put("rules", JSONArray().also { a -> rules.forEach { a.put(it.toJson()) } })
 
     companion object {
         private fun <T> list(o: JSONObject, key: String, f: (JSONObject) -> T): List<T> {
@@ -184,7 +194,8 @@ data class Data(
             list(o, "entries", { Entry.fromJson(it) }), list(o, "recurrings", { Recurring.fromJson(it) }),
             list(o, "meters", { Meter.fromJson(it) }), list(o, "readings", { Reading.fromJson(it) }),
             list(o, "persons", { Person.fromJson(it) }), enumOf(o.optString("split"), SplitMode.EQUAL),
-            o.optString("household"), o.optString("address")
+            o.optString("household"), o.optString("address"),
+            list(o, "rules", { Rule.fromJson(it) })
         )
     }
 }

@@ -31,9 +31,37 @@ object Ocr {
     /** Erkannter Text und Zeilen. Zeilen, die auf gleicher Höhe liegen (Tabellenspalten), werden zu einer Zeile verbunden. */
     class Scan(val text: String, val rows: List<String>)
 
-    suspend fun scan(ctx: Context, uri: Uri): Scan? = suspendCancellableCoroutine { cont ->
+    suspend fun scan(ctx: Context, uri: Uri): Scan? = try {
+        if (ctx.contentResolver.getType(uri) == "application/pdf") scanPdf(ctx, uri) else recognize(InputImage.fromFilePath(ctx, uri))
+    } catch (e: Exception) {
+        null
+    }
+
+    /** PDF-Seiten (höchstens 15) als Bilder darstellen und wie Fotos lesen. Auch hier läuft alles auf dem Gerät. */
+    private suspend fun scanPdf(ctx: Context, uri: Uri): Scan? {
+        val tmp = java.io.File(ctx.cacheDir, "import.pdf")
+        ctx.contentResolver.openInputStream(uri)?.use { i -> tmp.outputStream().use { i.copyTo(it) } } ?: return null
+        val rows = ArrayList<String>()
+        val text = StringBuilder()
+        android.graphics.pdf.PdfRenderer(android.os.ParcelFileDescriptor.open(tmp, android.os.ParcelFileDescriptor.MODE_READ_ONLY)).use { pr ->
+            for (p in 0 until minOf(pr.pageCount, 15)) {
+                pr.openPage(p).use { page ->
+                    val w = 1700
+                    val h = (w.toFloat() * page.height / page.width).toInt()
+                    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                    bmp.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bmp, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    recognize(InputImage.fromBitmap(bmp, 0))?.let { rows.addAll(it.rows); text.append(it.text).append('\n') }
+                    bmp.recycle()
+                }
+            }
+        }
+        tmp.delete()
+        return if (rows.isEmpty()) null else Scan(text.toString(), rows)
+    }
+
+    private suspend fun recognize(image: InputImage): Scan? = suspendCancellableCoroutine { cont ->
         try {
-            val image = InputImage.fromFilePath(ctx, uri)
             val rec = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             rec.process(image)
                 .addOnSuccessListener { t ->
@@ -60,6 +88,7 @@ object Ocr {
         } catch (e: Exception) {
             if (cont.isActive) cont.resume(null)
         }
+    }
     }
 
     /** Zahlen aus dem erkannten Text, die wie ein Zählerstand aussehen: 4 bis 8 Ziffern zuerst, dann nach Länge. */
