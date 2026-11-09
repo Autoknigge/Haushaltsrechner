@@ -54,6 +54,7 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
     var importMsg by remember { mutableStateOf<String?>(null) }
     var personDialog by remember { mutableStateOf<Person?>(null) }
     var newPerson by remember { mutableStateOf(false) }
+    var houseDialog by remember { mutableStateOf(false) }
     val d = vm.data
 
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
@@ -69,9 +70,14 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
 
     Scroller {
         HCard("Haushalt (Paar oder WG)", bg = O6, dark = true) {
+            Row2(
+                d.household.ifBlank { "Name des Haushalts" }, "ändern",
+                sub = d.address.ifBlank { "Anschrift oder Zusatz, steht oben neben dem Logo" },
+                onClick = { houseDialog = true }
+            )
             Hint("Bis zu 4 Personen. Bei Buchungen kannst du dann eintragen, wer gezahlt hat oder wessen Einnahme es ist. Die Übersicht rechnet aus, wer wem wie viel überweist.")
             d.persons.forEach { p -> Row2(p.name, "ändern", onClick = { personDialog = p }) }
-            if (d.persons.size < Person.MAX) TextButton(onClick = { newPerson = true }) { Text("+ Person hinzufügen") }
+            if (d.persons.size < Person.MAX) CardTextButton(onClick = { newPerson = true }) { Text("+ Person hinzufügen") }
             if (d.persons.size >= 2) {
                 Text("Kosten teilen", fontSize = 12.sp, color = LocalMuted.current)
                 Choice(SplitMode.values().toList(), d.split, { it.label }) { vm.setSplit(it) }
@@ -80,20 +86,20 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
 
         HCard("Sicherung und Export", bg = O7, dark = true) {
             Hint("Deine Daten liegen nur auf diesem Gerät. Mit der Sicherung (ZIP, mit Fotos) ziehst du auf ein neues Telefon um: Datei übertragen und dort einlesen.")
-            TextButton(onClick = { shareFile(ctx, Backup.write(ctx, vm.store, vm.data), "application/zip") }) { Text("Sicherung erstellen und teilen") }
-            TextButton(onClick = { openFile.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }) { Text("Sicherung einlesen") }
+            CardTextButton(onClick = { shareFile(ctx, Backup.write(ctx, vm.store, vm.data), "application/zip") }) { Text("Sicherung erstellen und teilen") }
+            CardTextButton(onClick = { openFile.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }) { Text("Sicherung einlesen") }
             importMsg?.let { Hint(it) }
-            TextButton(onClick = { shareText(ctx, "Hauskontor.csv", "text/csv", Calc.csv(vm.data)) }) { Text("Haushaltsbuch und Zählerstände als CSV teilen (Excel)") }
+            CardTextButton(onClick = { shareText(ctx, "Hauskontor.csv", "text/csv", Calc.csv(vm.data)) }) { Text("Haushaltsbuch und Zählerstände als CSV teilen (Excel)") }
         }
 
         HCard("Werbung", bg = O8, dark = true) {
             Hint("Die App ist kostenlos und finanziert sich durch Werbung: eine kurze Anzeige beim Start und ein Banner am unteren Rand.")
-            if (ads.privacyOptionsRequired) TextButton(onClick = { ads.showPrivacyOptions() }) { Text("Werbe-Einstellungen ändern") }
+            if (ads.privacyOptionsRequired) CardTextButton(onClick = { ads.showPrivacyOptions() }) { Text("Werbe-Einstellungen ändern") }
         }
 
         HCard("Datenschutz und Impressum", bg = O8, dark = true) {
-            TextButton(onClick = { uri.openUri(PRIVACY_URL) }) { Text("Datenschutzerklärung öffnen") }
-            TextButton(onClick = { uri.openUri(IMPRINT_URL) }) { Text("Impressum öffnen") }
+            CardTextButton(onClick = { uri.openUri(PRIVACY_URL) }) { Text("Datenschutzerklärung öffnen") }
+            CardTextButton(onClick = { uri.openUri(IMPRINT_URL) }) { Text("Impressum öffnen") }
         }
 
         HCard("Info", bg = O9, dark = true) {
@@ -107,7 +113,7 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
         }
 
         HCard("Daten löschen", bg = O9, dark = true) {
-            TextButton(onClick = { confirmWipe = true }) { Text("Alle Daten und Fotos löschen", color = MaterialTheme.colorScheme.error) }
+            CardTextButton(onClick = { confirmWipe = true }, color = BadRed) { Text("Alle Daten und Fotos löschen", color = BadRed) }
         }
     }
 
@@ -134,6 +140,23 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
                 }
             },
             dismissButton = { TextButton(onClick = { loaded = null }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (houseDialog) {
+        var hn by remember { mutableStateOf(d.household) }
+        var ha by remember { mutableStateOf(d.address) }
+        AlertDialog(
+            onDismissRequest = { houseDialog = false },
+            title = { Text("Haushalt benennen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = hn, onValueChange = { hn = it }, label = { Text("Name (z. B. Familie Meier, WG Nord)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = ha, onValueChange = { ha = it }, label = { Text("Anschrift oder Zusatz (optional, zweite Zeile)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.setHousehold(hn, ha); houseDialog = false }) { Text("Speichern") } },
+            dismissButton = { TextButton(onClick = { houseDialog = false }) { Text("Abbrechen") } }
         )
     }
 

@@ -159,7 +159,9 @@ data class Data(
     val meters: List<Meter> = emptyList(),
     val readings: List<Reading> = emptyList(),
     val persons: List<Person> = emptyList(),
-    val split: SplitMode = SplitMode.EQUAL
+    val split: SplitMode = SplitMode.EQUAL,
+    val household: String = "",
+    val address: String = ""
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("version", 1)
@@ -169,6 +171,8 @@ data class Data(
         .put("readings", JSONArray().also { a -> readings.forEach { a.put(it.toJson()) } })
         .put("persons", JSONArray().also { a -> persons.forEach { a.put(it.toJson()) } })
         .put("split", split.name)
+        .put("household", household)
+        .put("address", address)
 
     companion object {
         private fun <T> list(o: JSONObject, key: String, f: (JSONObject) -> T): List<T> {
@@ -179,7 +183,8 @@ data class Data(
         fun fromJson(o: JSONObject) = Data(
             list(o, "entries", { Entry.fromJson(it) }), list(o, "recurrings", { Recurring.fromJson(it) }),
             list(o, "meters", { Meter.fromJson(it) }), list(o, "readings", { Reading.fromJson(it) }),
-            list(o, "persons", { Person.fromJson(it) }), enumOf(o.optString("split"), SplitMode.EQUAL)
+            list(o, "persons", { Person.fromJson(it) }), enumOf(o.optString("split"), SplitMode.EQUAL),
+            o.optString("household"), o.optString("address")
         )
     }
 }

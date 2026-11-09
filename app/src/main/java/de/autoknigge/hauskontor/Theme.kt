@@ -34,10 +34,11 @@ val O9 = Color(0xFFF9DDB1)
 val CardGreen = Color(0xFF84B067)
 val CardSand = Color(0xFFE0CD95)
 val CardTeal = Color(0xFF00674F)
-val DarkInk = Color(0xFF14231B)
-val DarkMuted = Color(0xFF34453B)
+val DarkInk = Color(0xFF0A130E)
+val DarkMuted = Color(0xFF1F2A24)
 val WarmMuted = Color(0xFFFFE8D6)
-val IncomeGreen = Color(0xFF14663A)
+val IncomeGreen = Color(0xFF0F5A32)
+val BadRed = Color(0xFF9B1C1C)
 
 val LocalInk = androidx.compose.runtime.compositionLocalOf { Ink }
 val LocalMuted = androidx.compose.runtime.compositionLocalOf { Muted }

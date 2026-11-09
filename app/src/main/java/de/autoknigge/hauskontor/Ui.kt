@@ -25,6 +25,8 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -57,6 +59,7 @@ const val HOME_URL = "https://autoknigge.de"
 enum class Tab(val label: String, val icon: String) {
     Dash("Übersicht", "📊"),
     Book("Buch", "📒"),
+    Years("Jahre", "📈"),
     Meters("Zähler", "⚡"),
     More("Mehr", "⚙️")
 }
@@ -77,11 +80,24 @@ fun Root(vm: MainViewModel, ads: AdsController) {
                 modifier = Modifier.height(52.dp).aspectRatio(1143f / 511f).clip(RoundedCornerShape(10.dp))
             )
             Text(BuildConfig.VERSION_NAME, fontSize = 10.sp, color = Muted, modifier = Modifier.padding(start = 6.dp, bottom = 3.dp))
+            val h = vm.data.household
+            val a = vm.data.address
+            if (h.isNotBlank() || a.isNotBlank()) {
+                Column(Modifier.weight(1f).padding(start = 10.dp, bottom = 2.dp), horizontalAlignment = Alignment.End) {
+                    if (h.isNotBlank() && a.isNotBlank()) {
+                        Text(h, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Gold, maxLines = 1)
+                        Text(a, fontSize = 11.sp, color = Muted, maxLines = 1)
+                    } else {
+                        Text(h.ifBlank { a }, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Gold, maxLines = 2)
+                    }
+                }
+            }
         }
         Box(Modifier.weight(1f)) {
             when (Tab.values()[tab]) {
                 Tab.Dash -> DashboardScreen(vm, ym, onMonth)
                 Tab.Book -> BookScreen(vm, ym, onMonth)
+                Tab.Years -> YearsScreen(vm)
                 Tab.Meters -> MetersScreen(vm)
                 Tab.More -> MoreScreen(vm, ads)
             }
@@ -140,7 +156,14 @@ fun MonthBar(ym: YearMonth, onMonth: (Int) -> Unit) {
 @Composable
 fun <T> Choice(items: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        items.forEach { FilterChip(selected = it == selected, onClick = { onSelect(it) }, label = { Text(label(it)) }) }
+        items.forEach {
+            FilterChip(
+                selected = it == selected,
+                onClick = { onSelect(it) },
+                label = { Text(label(it)) },
+                colors = FilterChipDefaults.filterChipColors(labelColor = LocalInk.current, selectedLabelColor = Ink, selectedContainerColor = Panel)
+            )
+        }
     }
 }
 
@@ -188,4 +211,19 @@ fun Row2(left: String, right: String, rightColor: Color = Color.Unspecified, sub
         }
         Text(right, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (rightColor == Color.Unspecified) LocalInk.current else rightColor)
     }
+}
+
+/** Textknopf in Kacheln: dunkle Schrift, damit sie auf Orange lesbar ist. */
+@Composable
+fun CardTextButton(onClick: () -> Unit, color: Color = DarkInk, content: @Composable () -> Unit) {
+    TextButton(onClick = onClick, colors = ButtonDefaults.textButtonColors(contentColor = color)) { content() }
+}
+
+@Composable
+fun CardOutlinedButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = LocalInk.current),
+        border = BorderStroke(1.dp, LocalInk.current)
+    ) { content() }
 }

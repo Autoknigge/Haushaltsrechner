@@ -74,7 +74,9 @@ object Backup {
             add(a.meters, b.meters) { it.id },
             add(a.readings, b.readings) { it.id },
             persons,
-            if (a.persons.isNotEmpty()) a.split else b.split
+            if (a.persons.isNotEmpty()) a.split else b.split,
+            a.household.ifBlank { b.household },
+            a.address.ifBlank { b.address }
         )
     }
 }

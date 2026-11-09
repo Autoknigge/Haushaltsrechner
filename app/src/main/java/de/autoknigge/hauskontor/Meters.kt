@@ -98,8 +98,8 @@ fun MetersScreen(vm: MainViewModel) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { readingFor = m; readingEdit = null }) { Text("Ablesen") }
-                        OutlinedButton(onClick = { openId = m.id }) { Text("Verlauf") }
-                        TextButton(onClick = { meterDialog = m }) { Text("Ändern") }
+                        CardOutlinedButton(onClick = { openId = m.id }) { Text("Verlauf") }
+                        CardTextButton(onClick = { meterDialog = m }) { Text("Ändern") }
                     }
                 }
             }

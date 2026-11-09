@@ -66,6 +66,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     )
 
+    fun setHousehold(name: String, address: String) = commit(data.copy(household = name.trim(), address = address.trim()))
+
     fun setSplit(mode: SplitMode) = commit(data.copy(split = mode))
 
     /** Spielt eine Sicherung ein: entweder alles ersetzen oder fehlende Einträge hinzufügen. */
