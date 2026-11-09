@@ -64,6 +64,17 @@ class Store(context: Context) {
         null
     }
 
+    /** Foto aus einer Sicherung zurückspielen. Nur einfache Dateinamen sind erlaubt. */
+    fun writePhoto(name: String, bytes: ByteArray) {
+        if (!Regex("^[A-Za-z0-9._-]{1,80}$").matches(name) || name.contains("..")) return
+        val dir = File(ctx.filesDir, "belege").also { it.mkdirs() }
+        File(dir, name).writeBytes(bytes)
+    }
+
+    fun clearPhotos() {
+        File(ctx.filesDir, "belege").deleteRecursively()
+    }
+
     fun deletePhoto(name: String?) {
         if (name != null) photoFile(name).delete()
     }

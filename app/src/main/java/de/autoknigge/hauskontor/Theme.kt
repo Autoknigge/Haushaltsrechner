@@ -19,6 +19,29 @@ val Line = Color(0xFF2B5848)
 val Red = Color(0xFFE35336)
 val Green = Color(0xFF84B067)
 
+// Kachelfarben: wie in Solarprognose (Heute und Morgen) und Orange-Farbschema
+val TileToday = Color(0xFFE35336)
+val TileTomorrow = Color(0xFFD47E30)
+val O1 = Color(0xFFD24E01)
+val O2 = Color(0xFFDC6601)
+val O3 = Color(0xFFE27602)
+val O4 = Color(0xFFE88504)
+val O5 = Color(0xFFEC9006)
+val O6 = Color(0xFFEE9F27)
+val O7 = Color(0xFFF1B04C)
+val O8 = Color(0xFFF5C77E)
+val O9 = Color(0xFFF9DDB1)
+val CardGreen = Color(0xFF84B067)
+val CardSand = Color(0xFFE0CD95)
+val CardTeal = Color(0xFF00674F)
+val DarkInk = Color(0xFF14231B)
+val DarkMuted = Color(0xFF34453B)
+val WarmMuted = Color(0xFFFFE8D6)
+val IncomeGreen = Color(0xFF14663A)
+
+val LocalInk = androidx.compose.runtime.compositionLocalOf { Ink }
+val LocalMuted = androidx.compose.runtime.compositionLocalOf { Muted }
+
 fun cardBrush(start: Color, darken: Float = 0.35f): Brush =
     Brush.linearGradient(listOf(start, lerp(start, Color.Black, darken)))
 

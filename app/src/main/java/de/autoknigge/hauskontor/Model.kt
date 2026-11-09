@@ -19,6 +19,19 @@ enum class Interval(val label: String, val months: Int) {
     YEARLY("jährlich", 12)
 }
 
+enum class IncomeKind(val label: String) {
+    LOHN("Lohn / Gehalt"),
+    RENTE("Rente / Pension"),
+    ZINSEN("Zinsen / Dividende"),
+    MIETE("Mieteinnahmen"),
+    SONSTIGES("Sonstige Einnahmen")
+}
+
+enum class SplitMode(val label: String) {
+    EQUAL("Zu gleichen Teilen"),
+    BY_INCOME("Nach Einkommen")
+}
+
 enum class MeterType(val label: String, val unit: String) {
     STROM("Strom", "kWh"),
     GAS("Gas", "m³"),
@@ -29,7 +42,20 @@ enum class MeterType(val label: String, val unit: String) {
 private inline fun <reified T : Enum<T>> enumOf(s: String?, fallback: T): T =
     enumValues<T>().firstOrNull { it.name == s } ?: fallback
 
-/** Einzelne Buchung im Haushaltsbuch. [date] ist ein Epochentag, [cents] immer positiv. */
+/** Mitglied des Haushalts (Paar oder WG, bis zu vier Personen). */
+data class Person(val id: String, val name: String) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name)
+
+    companion object {
+        const val MAX = 4
+        fun fromJson(o: JSONObject) = Person(o.getString("id"), o.optString("name"))
+    }
+}
+
+/**
+ * Einzelne Buchung im Haushaltsbuch. [date] ist ein Epochentag, [cents] immer positiv.
+ * [personId]: bei Ausgaben, wer gezahlt hat, bei Einnahmen, wessen Einnahme. Leer heißt gemeinsame Kasse.
+ */
 data class Entry(
     val id: String,
     val date: Long,
@@ -37,15 +63,20 @@ data class Entry(
     val cents: Long,
     val category: Category,
     val income: Boolean = false,
-    val note: String = ""
+    val note: String = "",
+    val personId: String? = null,
+    val incomeKind: IncomeKind? = null
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("date", date).put("title", title)
         .put("cents", cents).put("category", category.name).put("income", income).put("note", note)
+        .put("person", personId ?: JSONObject.NULL).put("kind", incomeKind?.name ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(o: JSONObject) = Entry(
             o.getString("id"), o.getLong("date"), o.optString("title"), o.getLong("cents"),
-            enumOf(o.optString("category"), Category.SONSTIGES), o.optBoolean("income"), o.optString("note")
+            enumOf(o.optString("category"), Category.SONSTIGES), o.optBoolean("income"), o.optString("note"),
+            if (o.isNull("person")) null else o.optString("person"),
+            if (o.isNull("kind")) null else enumOf(o.optString("kind"), IncomeKind.SONSTIGES)
         )
     }
 }
@@ -59,17 +90,24 @@ data class Recurring(
     val interval: Interval,
     val start: Long,
     val end: Long? = null,
-    val note: String = ""
+    val note: String = "",
+    val income: Boolean = false,
+    val incomeKind: IncomeKind? = null,
+    val personId: String? = null
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("cents", cents)
         .put("category", category.name).put("interval", interval.name).put("start", start)
-        .put("end", end ?: JSONObject.NULL).put("note", note)
+        .put("end", end ?: JSONObject.NULL).put("note", note).put("income", income)
+        .put("kind", incomeKind?.name ?: JSONObject.NULL).put("person", personId ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(o: JSONObject) = Recurring(
             o.getString("id"), o.optString("title"), o.getLong("cents"),
             enumOf(o.optString("category"), Category.FIXKOSTEN), enumOf(o.optString("interval"), Interval.MONTHLY),
-            o.getLong("start"), if (o.isNull("end")) null else o.getLong("end"), o.optString("note")
+            o.getLong("start"), if (o.isNull("end")) null else o.getLong("end"), o.optString("note"),
+            o.optBoolean("income"),
+            if (o.isNull("kind")) null else enumOf(o.optString("kind"), IncomeKind.SONSTIGES),
+            if (o.isNull("person")) null else o.optString("person")
         )
     }
 }
@@ -119,7 +157,9 @@ data class Data(
     val entries: List<Entry> = emptyList(),
     val recurrings: List<Recurring> = emptyList(),
     val meters: List<Meter> = emptyList(),
-    val readings: List<Reading> = emptyList()
+    val readings: List<Reading> = emptyList(),
+    val persons: List<Person> = emptyList(),
+    val split: SplitMode = SplitMode.EQUAL
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("version", 1)
@@ -127,6 +167,8 @@ data class Data(
         .put("recurrings", JSONArray().also { a -> recurrings.forEach { a.put(it.toJson()) } })
         .put("meters", JSONArray().also { a -> meters.forEach { a.put(it.toJson()) } })
         .put("readings", JSONArray().also { a -> readings.forEach { a.put(it.toJson()) } })
+        .put("persons", JSONArray().also { a -> persons.forEach { a.put(it.toJson()) } })
+        .put("split", split.name)
 
     companion object {
         private fun <T> list(o: JSONObject, key: String, f: (JSONObject) -> T): List<T> {
@@ -136,7 +178,8 @@ data class Data(
 
         fun fromJson(o: JSONObject) = Data(
             list(o, "entries", { Entry.fromJson(it) }), list(o, "recurrings", { Recurring.fromJson(it) }),
-            list(o, "meters", { Meter.fromJson(it) }), list(o, "readings", { Reading.fromJson(it) })
+            list(o, "meters", { Meter.fromJson(it) }), list(o, "readings", { Reading.fromJson(it) }),
+            list(o, "persons", { Person.fromJson(it) }), enumOf(o.optString("split"), SplitMode.EQUAL)
         )
     }
 }

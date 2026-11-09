@@ -28,6 +28,40 @@ object Ocr {
         }
     }
 
+    /** Erkannter Text und Zeilen. Zeilen, die auf gleicher Höhe liegen (Tabellenspalten), werden zu einer Zeile verbunden. */
+    class Scan(val text: String, val rows: List<String>)
+
+    suspend fun scan(ctx: Context, uri: Uri): Scan? = suspendCancellableCoroutine { cont ->
+        try {
+            val image = InputImage.fromFilePath(ctx, uri)
+            val rec = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            rec.process(image)
+                .addOnSuccessListener { t ->
+                    rec.close()
+                    val lines = t.textBlocks.flatMap { it.lines }.filter { it.boundingBox != null }
+                        .sortedBy { it.boundingBox!!.centerY() }
+                    val rows = ArrayList<MutableList<com.google.mlkit.vision.text.Text.Line>>()
+                    var cy = -1
+                    for (l in lines) {
+                        val b = l.boundingBox!!
+                        if (rows.isNotEmpty() && Math.abs(b.centerY() - cy) < b.height() * 0.6) rows.last().add(l)
+                        else {
+                            rows.add(mutableListOf(l))
+                            cy = b.centerY()
+                        }
+                    }
+                    val out = rows.map { r -> r.sortedBy { it.boundingBox!!.left }.joinToString(" ") { it.text } }
+                    if (cont.isActive) cont.resume(Scan(t.text, out))
+                }
+                .addOnFailureListener {
+                    rec.close()
+                    if (cont.isActive) cont.resume(null)
+                }
+        } catch (e: Exception) {
+            if (cont.isActive) cont.resume(null)
+        }
+    }
+
     /** Zahlen aus dem erkannten Text, die wie ein Zählerstand aussehen: 4 bis 8 Ziffern zuerst, dann nach Länge. */
     fun extract(text: String): List<String> {
         val flat = text.replace('\n', ' ')

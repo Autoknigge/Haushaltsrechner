@@ -70,13 +70,17 @@ fun MetersScreen(vm: MainViewModel) {
         Scroller {
             Button(onClick = { newMeter = true }) { Text("+ Zähler") }
             if (d.meters.isEmpty()) {
-                HCard("Zähler ablesen") {
+                HCard("Zähler ablesen", bg = O9, dark = true) {
                     Hint("Lege einen Zähler an (Strom, Gas, Wasser oder Wärme). Danach liest du den Stand per Foto ab: Die App erkennt die Zahl, du prüfst sie und speicherst. Das Foto bleibt als Beleg auf deinem Gerät.")
                 }
             }
             d.meters.forEach { m ->
                 val rs = Calc.readingsOf(d, m.id)
-                HCard(m.name + " (" + m.type.label + ")") {
+                HCard(
+                    m.name + " (" + m.type.label + ")",
+                    bg = when (m.type) { MeterType.STROM -> O5; MeterType.GAS -> TileToday; MeterType.WASSER -> CardTeal; MeterType.WAERME -> O2 },
+                    dark = m.type == MeterType.STROM
+                ) {
                     if (rs.isEmpty()) {
                         Hint("Noch keine Ablesung.")
                     } else {
@@ -125,26 +129,26 @@ private fun MeterDetail(vm: MainViewModel, m: Meter, onBack: () -> Unit, onEditR
         }
         Button(onClick = onNewReading) { Text("+ Neue Ablesung") }
         if (rs.size >= 2) {
-            HCard("Verbrauch je Ablesezeitraum (" + m.type.unit + ")") {
+            HCard("Verbrauch je Ablesezeitraum (" + m.type.unit + ")", bg = O8, dark = true) {
                 val deltas = rs.zipWithNext { a, b -> b.value - a.value }.takeLast(12)
                 val max = (deltas.maxOrNull() ?: 0.0).coerceAtLeast(0.0001)
                 Row(Modifier.fillMaxWidth().height(90.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
                     deltas.forEach { v ->
-                        Box(Modifier.weight(1f).height((80 * (v.coerceAtLeast(0.0) / max)).toFloat().dp.coerceAtLeast(2.dp)).clip(RoundedCornerShape(3.dp)).background(Gold))
+                        Box(Modifier.weight(1f).height((80 * (v.coerceAtLeast(0.0) / max)).toFloat().dp.coerceAtLeast(2.dp)).clip(RoundedCornerShape(3.dp)).background(TileToday))
                     }
                 }
             }
         }
-        HCard("Ablesungen") {
+        HCard("Ablesungen", bg = O9, dark = true) {
             if (rs.isEmpty()) Hint("Noch keine Ablesung.")
             rs.reversed().forEachIndexed { idx, r ->
                 val prev = rs.getOrNull(rs.size - 2 - idx)
                 Row(Modifier.fillMaxWidth().clickable { onEditReading(r) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(Calc.num(r.value, 1) + " " + m.type.unit, fontSize = 14.sp, color = Ink)
+                        Text(Calc.num(r.value, 1) + " " + m.type.unit, fontSize = 14.sp, color = LocalInk.current)
                         Text(
                             Calc.dateText(r.date) + (if (prev != null) " · +" + Calc.num(r.value - prev.value, 1) + " seit " + Calc.dateText(prev.date) else "") + (if (r.viaOcr) " · Foto" else ""),
-                            fontSize = 11.5.sp, color = Muted
+                            fontSize = 11.5.sp, color = LocalMuted.current
                         )
                     }
                     PhotoThumb(vm, r.photo, 48)

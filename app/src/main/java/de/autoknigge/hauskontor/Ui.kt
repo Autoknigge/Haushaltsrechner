@@ -102,23 +102,28 @@ fun Root(vm: MainViewModel, ads: AdsController) {
 
 // ---------- Bausteine ----------
 
+/** Kachel mit Farbverlauf von oben links nach unten rechts. Bei hellen Farben ([dark] = true) steht dunkle Schrift darauf. */
 @Composable
-fun HCard(title: String?, modifier: Modifier = Modifier, bg: Color = Panel, content: @Composable ColumnScope.() -> Unit) {
+fun HCard(title: String?, modifier: Modifier = Modifier, bg: Color = Panel, dark: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(14.dp)
-    Column(
-        modifier.fillMaxWidth().clip(shape).background(cardBrush(bg)).border(1.dp, Line, shape).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Ink)
-        content()
+    val ink = if (dark) DarkInk else Color.White
+    val muted = if (dark) DarkMuted else WarmMuted
+    androidx.compose.runtime.CompositionLocalProvider(LocalInk provides ink, LocalMuted provides muted) {
+        Column(
+            modifier.fillMaxWidth().clip(shape).background(cardBrush(bg, if (dark) 0.22f else 0.45f)).border(1.dp, Line, shape).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = ink)
+            content()
+        }
     }
 }
 
 @Composable
-fun Stat(label: String, value: String, color: Color = Ink, modifier: Modifier = Modifier) {
+fun Stat(label: String, value: String, color: Color = Color.Unspecified, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(label, fontSize = 11.sp, color = Muted)
-        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(label, fontSize = 11.sp, color = LocalMuted.current)
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = if (color == Color.Unspecified) LocalInk.current else color)
     }
 }
 
@@ -169,18 +174,18 @@ fun Scroller(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-fun Hint(text: String) = Text(text, fontSize = 12.5.sp, color = Muted, lineHeight = 17.sp)
+fun Hint(text: String) = Text(text, fontSize = 12.5.sp, color = LocalMuted.current, lineHeight = 17.sp)
 
 @Composable
-fun Row2(left: String, right: String, rightColor: Color = Ink, sub: String? = null, onClick: (() -> Unit)? = null) {
+fun Row2(left: String, right: String, rightColor: Color = Color.Unspecified, sub: String? = null, onClick: (() -> Unit)? = null) {
     Row(
         Modifier.fillMaxWidth().let { if (onClick != null) it.clickable { onClick() } else it }.padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(left, fontSize = 14.sp, color = Ink)
-            if (sub != null) Text(sub, fontSize = 11.5.sp, color = Muted)
+            Text(left, fontSize = 14.sp, color = LocalInk.current)
+            if (sub != null) Text(sub, fontSize = 11.5.sp, color = LocalMuted.current)
         }
-        Text(right, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = rightColor)
+        Text(right, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (rightColor == Color.Unspecified) LocalInk.current else rightColor)
     }
 }

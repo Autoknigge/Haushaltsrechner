@@ -51,6 +51,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         commit(data.copy(readings = data.readings.filter { it.id != id }))
     }
 
+    fun saveEntries(list: List<Entry>) = commit(data.copy(entries = data.entries + list))
+
+    fun savePerson(p: Person) {
+        if (data.persons.none { it.id == p.id } && data.persons.size >= Person.MAX) return
+        commit(data.copy(persons = if (data.persons.any { it.id == p.id }) data.persons.map { if (it.id == p.id) p else it } else data.persons + p))
+    }
+
+    fun deletePerson(id: String) = commit(
+        data.copy(
+            persons = data.persons.filter { it.id != id },
+            entries = data.entries.map { if (it.personId == id) it.copy(personId = null) else it },
+            recurrings = data.recurrings.map { if (it.personId == id) it.copy(personId = null) else it }
+        )
+    )
+
+    fun setSplit(mode: SplitMode) = commit(data.copy(split = mode))
+
+    /** Spielt eine Sicherung ein: entweder alles ersetzen oder fehlende Einträge hinzufügen. */
+    fun importBackup(l: Backup.Loaded, replace: Boolean) {
+        if (replace) store.clearPhotos()
+        l.photos.forEach { (n, b) -> store.writePhoto(n, b) }
+        commit(if (replace) l.data else Backup.merge(data, l.data))
+    }
+
     /** Legt ein Foto verkleinert im App-Speicher ab und gibt den Dateinamen zurück. */
     fun keepPhoto(uri: Uri): String? = store.savePhoto(uri)
 
