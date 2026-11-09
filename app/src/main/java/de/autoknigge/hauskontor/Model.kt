@@ -1,0 +1,142 @@
+package de.autoknigge.hauskontor
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+enum class Category(val label: String) {
+    FIXKOSTEN("Fixkosten"),
+    VERSICHERUNG("Versicherung"),
+    EINKAUF("Einkauf"),
+    ABBUCHUNG("Abbuchung"),
+    NEBENKOSTEN("Wohnnebenkosten"),
+    SONSTIGES("Sonstiges")
+}
+
+enum class Interval(val label: String, val months: Int) {
+    MONTHLY("monatlich", 1),
+    QUARTERLY("vierteljährlich", 3),
+    HALF("halbjährlich", 6),
+    YEARLY("jährlich", 12)
+}
+
+enum class MeterType(val label: String, val unit: String) {
+    STROM("Strom", "kWh"),
+    GAS("Gas", "m³"),
+    WASSER("Wasser", "m³"),
+    WAERME("Wärme", "kWh")
+}
+
+private inline fun <reified T : Enum<T>> enumOf(s: String?, fallback: T): T =
+    enumValues<T>().firstOrNull { it.name == s } ?: fallback
+
+/** Einzelne Buchung im Haushaltsbuch. [date] ist ein Epochentag, [cents] immer positiv. */
+data class Entry(
+    val id: String,
+    val date: Long,
+    val title: String,
+    val cents: Long,
+    val category: Category,
+    val income: Boolean = false,
+    val note: String = ""
+) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("date", date).put("title", title)
+        .put("cents", cents).put("category", category.name).put("income", income).put("note", note)
+
+    companion object {
+        fun fromJson(o: JSONObject) = Entry(
+            o.getString("id"), o.getLong("date"), o.optString("title"), o.getLong("cents"),
+            enumOf(o.optString("category"), Category.SONSTIGES), o.optBoolean("income"), o.optString("note")
+        )
+    }
+}
+
+/** Wiederkehrende Zahlung (Fixkosten, Versicherung, Grundsteuer ...). Fällig ab [start], im Rhythmus [interval]. */
+data class Recurring(
+    val id: String,
+    val title: String,
+    val cents: Long,
+    val category: Category,
+    val interval: Interval,
+    val start: Long,
+    val end: Long? = null,
+    val note: String = ""
+) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("cents", cents)
+        .put("category", category.name).put("interval", interval.name).put("start", start)
+        .put("end", end ?: JSONObject.NULL).put("note", note)
+
+    companion object {
+        fun fromJson(o: JSONObject) = Recurring(
+            o.getString("id"), o.optString("title"), o.getLong("cents"),
+            enumOf(o.optString("category"), Category.FIXKOSTEN), enumOf(o.optString("interval"), Interval.MONTHLY),
+            o.getLong("start"), if (o.isNull("end")) null else o.getLong("end"), o.optString("note")
+        )
+    }
+}
+
+/** Zähler. [priceCt] ist der Arbeitspreis in ct je Einheit, [baseEurMonth] der Grundpreis je Monat. */
+data class Meter(
+    val id: String,
+    val name: String,
+    val type: MeterType,
+    val number: String = "",
+    val priceCt: Double = 0.0,
+    val baseEurMonth: Double = 0.0
+) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("type", type.name)
+        .put("number", number).put("priceCt", priceCt).put("base", baseEurMonth)
+
+    companion object {
+        fun fromJson(o: JSONObject) = Meter(
+            o.getString("id"), o.optString("name"), enumOf(o.optString("type"), MeterType.STROM),
+            o.optString("number"), o.optDouble("priceCt", 0.0), o.optDouble("base", 0.0)
+        )
+    }
+}
+
+data class Reading(
+    val id: String,
+    val meterId: String,
+    val date: Long,
+    val value: Double,
+    val photo: String? = null,
+    val viaOcr: Boolean = false,
+    val note: String = ""
+) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("meter", meterId).put("date", date).put("value", value)
+        .put("photo", photo ?: JSONObject.NULL).put("ocr", viaOcr).put("note", note)
+
+    companion object {
+        fun fromJson(o: JSONObject) = Reading(
+            o.getString("id"), o.getString("meter"), o.getLong("date"), o.getDouble("value"),
+            if (o.isNull("photo")) null else o.optString("photo"), o.optBoolean("ocr"), o.optString("note")
+        )
+    }
+}
+
+/** Alle Daten der App. Sie liegen als eine JSON-Datei im App-Speicher. */
+data class Data(
+    val entries: List<Entry> = emptyList(),
+    val recurrings: List<Recurring> = emptyList(),
+    val meters: List<Meter> = emptyList(),
+    val readings: List<Reading> = emptyList()
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("version", 1)
+        .put("entries", JSONArray().also { a -> entries.forEach { a.put(it.toJson()) } })
+        .put("recurrings", JSONArray().also { a -> recurrings.forEach { a.put(it.toJson()) } })
+        .put("meters", JSONArray().also { a -> meters.forEach { a.put(it.toJson()) } })
+        .put("readings", JSONArray().also { a -> readings.forEach { a.put(it.toJson()) } })
+
+    companion object {
+        private fun <T> list(o: JSONObject, key: String, f: (JSONObject) -> T): List<T> {
+            val a = o.optJSONArray(key) ?: return emptyList()
+            return (0 until a.length()).mapNotNull { i -> try { f(a.getJSONObject(i)) } catch (e: Exception) { null } }
+        }
+
+        fun fromJson(o: JSONObject) = Data(
+            list(o, "entries", { Entry.fromJson(it) }), list(o, "recurrings", { Recurring.fromJson(it) }),
+            list(o, "meters", { Meter.fromJson(it) }), list(o, "readings", { Reading.fromJson(it) })
+        )
+    }
+}

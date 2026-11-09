@@ -1,0 +1,17 @@
+name: Build
+
+# Läuft bei jedem Push auf main (Test-APK) und bei einem Tag wie "1.0" (signierte APK + AAB als Release).
+on:
+  push:
+    branches: [main]
+    tags: ['[0-9]*']
+    paths-ignore: ['docs/**', 'README.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:

@@ -1,0 +1,186 @@
+package de.autoknigge.hauskontor
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.time.YearMonth
+
+const val PRIVACY_URL = "https://autoknigge.de/hauskontor/datenschutz.html"
+const val IMPRINT_URL = "https://autoknigge.de/impressum.html"
+const val HOME_URL = "https://autoknigge.de"
+
+enum class Tab(val label: String, val icon: String) {
+    Dash("Übersicht", "📊"),
+    Book("Buch", "📒"),
+    Meters("Zähler", "⚡"),
+    More("Mehr", "⚙️")
+}
+
+@Composable
+fun Root(vm: MainViewModel, ads: AdsController) {
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var monthIdx by rememberSaveable { mutableIntStateOf(YearMonth.now().let { it.year * 12 + it.monthValue - 1 }) }
+    val ym = YearMonth.of(monthIdx / 12, monthIdx % 12 + 1)
+    val onMonth: (Int) -> Unit = { monthIdx += it }
+
+    Column(Modifier.fillMaxSize().background(Forest).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
+            Image(
+                painter = painterResource(R.drawable.logo_header),
+                contentDescription = "Hauskontor",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.height(52.dp).aspectRatio(1143f / 511f).clip(RoundedCornerShape(10.dp))
+            )
+            Text(BuildConfig.VERSION_NAME, fontSize = 10.sp, color = Muted, modifier = Modifier.padding(start = 6.dp, bottom = 3.dp))
+        }
+        Box(Modifier.weight(1f)) {
+            when (Tab.values()[tab]) {
+                Tab.Dash -> DashboardScreen(vm, ym, onMonth)
+                Tab.Book -> BookScreen(vm, ym, onMonth)
+                Tab.Meters -> MetersScreen(vm)
+                Tab.More -> MoreScreen(vm, ads)
+            }
+        }
+        BannerBar(ads)
+        NavigationBar {
+            Tab.values().forEachIndexed { i, t ->
+                NavigationBarItem(
+                    selected = tab == i,
+                    onClick = { tab = i },
+                    icon = { Text(t.icon, fontSize = 18.sp) },
+                    label = { Text(t.label, fontSize = 11.sp, maxLines = 1) }
+                )
+            }
+        }
+    }
+}
+
+// ---------- Bausteine ----------
+
+@Composable
+fun HCard(title: String?, modifier: Modifier = Modifier, bg: Color = Panel, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier.fillMaxWidth().clip(shape).background(cardBrush(bg)).border(1.dp, Line, shape).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Ink)
+        content()
+    }
+}
+
+@Composable
+fun Stat(label: String, value: String, color: Color = Ink, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(label, fontSize = 11.sp, color = Muted)
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color)
+    }
+}
+
+@Composable
+fun MonthBar(ym: YearMonth, onMonth: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = { onMonth(-1) }) { Text("‹", fontSize = 22.sp) }
+        Text(Calc.monthText(ym), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        TextButton(onClick = { onMonth(1) }) { Text("›", fontSize = 22.sp) }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun <T> Choice(items: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.forEach { FilterChip(selected = it == selected, onClick = { onSelect(it) }, label = { Text(label(it)) }) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DateField(label: String, epochDay: Long, onChange: (Long) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { open = true }, border = BorderStroke(1.dp, Line)) { Text(label + ": " + Calc.dateText(epochDay)) }
+    if (open) {
+        val st = rememberDatePickerState(initialSelectedDateMillis = epochDay * 86_400_000L)
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    st.selectedDateMillis?.let { onChange(Math.floorDiv(it, 86_400_000L)) }
+                    open = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Abbrechen") } }
+        ) { DatePicker(state = st) }
+    }
+}
+
+@Composable
+fun Scroller(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        content = content
+    )
+}
+
+@Composable
+fun Hint(text: String) = Text(text, fontSize = 12.5.sp, color = Muted, lineHeight = 17.sp)
+
+@Composable
+fun Row2(left: String, right: String, rightColor: Color = Ink, sub: String? = null, onClick: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().let { if (onClick != null) it.clickable { onClick() } else it }.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(left, fontSize = 14.sp, color = Ink)
+            if (sub != null) Text(sub, fontSize = 11.5.sp, color = Muted)
+        }
+        Text(right, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = rightColor)
+    }
+}
