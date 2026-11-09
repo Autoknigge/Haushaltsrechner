@@ -46,7 +46,7 @@ private fun labelOf(idx: Int, n: Int): String {
     }
 }
 
-private fun linesOf(d: Data, idx: Int, n: Int): List<Calc.Posting> =
+private fun linesOf(d: Data, idx: Int, n: Int): List<Posting> =
     (0 until n).flatMap { Calc.monthLines(d, startOf(idx, n).plusMonths(it.toLong())) }
 
 private fun usageOf(d: Data, m: Meter, idx: Int, n: Int): Double? {
