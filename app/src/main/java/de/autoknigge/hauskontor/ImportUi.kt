@@ -142,7 +142,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                     OutlinedButton(onClick = { pickPdf.launch(arrayOf("application/pdf")) }) { Text("📄 PDF") }
                 }
                 if (busy) Text("Text wird gelesen …", fontSize = 13.sp)
-                if (failed) Text("Es wurde kein Text erkannt. Mache das Foto bei gutem Licht, gerade von oben und möglichst formatfüllend.", fontSize = 12.5.sp)
+                if (failed) Text(Ocr.error ?: "Es wurde kein Text erkannt. Mache das Foto bei gutem Licht, gerade von oben und möglichst formatfüllend.", fontSize = 12.5.sp)
 
                 if (scan != null && !failed) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

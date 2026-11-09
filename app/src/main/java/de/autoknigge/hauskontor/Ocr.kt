@@ -31,10 +31,27 @@ object Ocr {
     /** Erkannter Text und Zeilen. Zeilen, die auf gleicher Höhe liegen (Tabellenspalten), werden zu einer Zeile verbunden. */
     class Scan(val text: String, val rows: List<String>)
 
-    suspend fun scan(ctx: Context, uri: Uri): Scan? = try {
-        if (ctx.contentResolver.getType(uri) == "application/pdf") scanPdf(ctx, uri) else recognize(InputImage.fromFilePath(ctx, uri))
-    } catch (e: Exception) {
-        null
+    /** Letzte Fehlermeldung beim Einlesen (für die Anzeige). */
+    var error: String? = null
+
+    private fun isPdf(ctx: Context, uri: Uri): Boolean {
+        if (ctx.contentResolver.getType(uri) == "application/pdf") return true
+        return try {
+            ctx.contentResolver.openInputStream(uri)?.use { i -> val b = ByteArray(5); i.read(b) == 5 && String(b, Charsets.ISO_8859_1).startsWith("%PDF") } ?: false
+        } catch (e: Exception) { false }
+    }
+
+    suspend fun scan(ctx: Context, uri: Uri): Scan? {
+        error = null
+        return try {
+            if (isPdf(ctx, uri)) scanPdf(ctx, uri) else recognize(InputImage.fromFilePath(ctx, uri))
+        } catch (e: SecurityException) {
+            error = "Das PDF ist passwortgeschützt. Öffne es in einem PDF-Programm, speichere es ohne Passwort oder mache einen Screenshot davon."
+            null
+        } catch (e: Throwable) {
+            error = "Das PDF konnte nicht gelesen werden (" + (e.message ?: e.javaClass.simpleName) + ")."
+            null
+        }
     }
 
     /** PDF-Seiten (höchstens 15) als Bilder darstellen und wie Fotos lesen. Auch hier läuft alles auf dem Gerät. */
@@ -46,7 +63,7 @@ object Ocr {
         android.graphics.pdf.PdfRenderer(android.os.ParcelFileDescriptor.open(tmp, android.os.ParcelFileDescriptor.MODE_READ_ONLY)).use { pr ->
             for (p in 0 until minOf(pr.pageCount, 15)) {
                 pr.openPage(p).use { page ->
-                    val w = 1700
+                    val w = 2000
                     val h = (w.toFloat() * page.height / page.width).toInt()
                     val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
                     bmp.eraseColor(android.graphics.Color.WHITE)
