@@ -39,7 +39,7 @@ private fun shareFile(ctx: Context, f: File, mime: String) {
     ctx.startActivity(Intent.createChooser(i, "Teilen"))
 }
 
-private fun shareText(ctx: Context, name: String, mime: String, text: String) {
+fun shareText(ctx: Context, name: String, mime: String, text: String) {
     val dir = File(ctx.cacheDir, "teilen").also { it.mkdirs() }
     val f = File(dir, name)
     f.writeText(text)
@@ -120,6 +120,7 @@ fun MoreScreen(vm: MainViewModel, ads: AdsController) {
             CardTextButton(onClick = { openFile.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }) { Text("Sicherung einlesen") }
             importMsg?.let { Hint(it) }
             CardTextButton(onClick = { shareText(ctx, "Hauskontor.csv", "text/csv", Calc.csv(vm.data)) }) { Text("Haushaltsbuch und Zählerstände als CSV teilen (Excel)") }
+            CardTextButton(onClick = { shareText(ctx, "Hauskontor-Zaehlerstaende.csv", "text/csv", Calc.readingsCsv(vm.data)) }) { Text("Nur Zählerstände als Tabelle teilen (Datum, Uhrzeit, Zählernummer, Stand)") }
         }
 
         if (d.rules.isNotEmpty()) {

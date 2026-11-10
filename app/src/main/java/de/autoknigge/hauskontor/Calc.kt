@@ -131,7 +131,7 @@ object Calc {
     /** Monatsäquivalent einer wiederkehrenden Zahlung (Cent je Monat). */
     fun perMonth(r: Recurring): Double = r.cents.toDouble() / r.interval.months
 
-    fun readingsOf(d: Data, meterId: String): List<Reading> = d.readings.filter { it.meterId == meterId }.sortedBy { it.date }
+    fun readingsOf(d: Data, meterId: String): List<Reading> = d.readings.filter { it.meterId == meterId }.sortedWith(compareBy({ it.date }, { it.timeMin }))
 
     /** Verbrauch im Monat: Der Verbrauch zwischen zwei Ablesungen wird gleichmäßig auf die Tage verteilt. Null, wenn keine Ablesungen den Monat abdecken. */
     fun consumption(rs: List<Reading>, ym: YearMonth): Double? {
@@ -155,6 +155,22 @@ object Calc {
 
     fun cost(m: Meter, consumption: Double): Double = consumption * m.priceCt / 100.0 + m.baseEurMonth
 
+    fun timeText(min: Int): String = if (min < 0) "" else String.format(Locale.GERMANY, "%02d:%02d", min / 60, min % 60)
+
+    /** Zählerstände als Tabelle: Datum, Uhrzeit, Zählernummer, Zählerstand. */
+    fun readingsCsv(d: Data): String {
+        fun q(s: String) = "\"" + s.replace("\"", "\"\"") + "\""
+        val sb = StringBuilder("Datum;Uhrzeit;Zähler;Zählernummer;Zählerstand;Einheit;Notiz\n")
+        d.meters.forEach { m ->
+            readingsOf(d, m.id).forEach { r ->
+                sb.append(dateText(r.date)).append(';').append(timeText(r.timeMin)).append(';').append(q(m.name)).append(';')
+                    .append(q(r.meterNo.ifBlank { m.number })).append(';').append(String.format(Locale.GERMANY, "%.3f", r.value)).append(';')
+                    .append(m.type.unit).append(';').append(q(r.note)).append('\n')
+            }
+        }
+        return sb.toString()
+    }
+
     fun csv(d: Data): String {
         fun q(s: String) = "\"" + s.replace("\"", "\"\"") + "\""
         val sb = StringBuilder("Datum;Titel;Kategorie;Art;Betrag in Euro;Person;Notiz\n")
@@ -171,12 +187,7 @@ object Calc {
                 .append((if (it.income) "Regelmäßige Einnahme, " else "Wiederkehrend, ") + it.interval.label).append(';').append(centsText(it.cents)).append(';')
                 .append(q(who(it.personId))).append(';').append(q(it.note)).append('\n')
         }
-        sb.append("\nZähler;Datum;Stand;Einheit\n")
-        d.meters.forEach { m ->
-            readingsOf(d, m.id).forEach { r ->
-                sb.append(q(m.name)).append(';').append(dateText(r.date)).append(';').append(String.format(Locale.GERMANY, "%.2f", r.value)).append(';').append(m.type.unit).append('\n')
-            }
-        }
+        sb.append("\n").append(readingsCsv(d))
         return sb.toString()
     }
 }

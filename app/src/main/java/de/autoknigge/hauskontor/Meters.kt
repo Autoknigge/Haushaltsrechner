@@ -44,12 +44,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
 
@@ -121,6 +124,7 @@ fun MetersScreen(vm: MainViewModel) {
 
 @Composable
 private fun MeterDetail(vm: MainViewModel, m: Meter, onBack: () -> Unit, onEditReading: (Reading) -> Unit, onNewReading: () -> Unit) {
+    val ctx = LocalContext.current
     val rs = Calc.readingsOf(vm.data, m.id)
     Scroller {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -146,19 +150,32 @@ private fun MeterDetail(vm: MainViewModel, m: Meter, onBack: () -> Unit, onEditR
         }
         HCard("Ablesungen", bg = O9, dark = true) {
             if (rs.isEmpty()) Hint("Noch keine Ablesung.")
+            else {
+                Row(Modifier.fillMaxWidth()) {
+                    Text("Datum", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LocalInk.current, modifier = Modifier.weight(1.15f))
+                    Text("Uhrzeit", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LocalInk.current, modifier = Modifier.weight(0.8f))
+                    Text("Zählernr.", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LocalInk.current, modifier = Modifier.weight(1.4f))
+                    Text("Stand", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LocalInk.current, modifier = Modifier.weight(1.1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    Box(Modifier.size(48.dp))
+                }
+            }
             rs.reversed().forEachIndexed { idx, r ->
                 val prev = rs.getOrNull(rs.size - 2 - idx)
-                Row(Modifier.fillMaxWidth().clickable { onEditReading(r) }, verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(Calc.num(r.value, 1) + " " + m.type.unit, fontSize = 14.sp, color = LocalInk.current)
-                        Text(
-                            Calc.dateText(r.date) + (if (prev != null) " · +" + Calc.num(r.value - prev.value, 1) + " seit " + Calc.dateText(prev.date) else "") + (if (r.viaOcr) " · Foto" else ""),
-                            fontSize = 11.5.sp, color = LocalMuted.current
-                        )
+                Column(Modifier.fillMaxWidth().clickable { onEditReading(r) }) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(Calc.dateText(r.date), fontSize = 12.5.sp, color = LocalInk.current, modifier = Modifier.weight(1.15f))
+                        Text(Calc.timeText(r.timeMin).ifBlank { "–" }, fontSize = 12.5.sp, color = LocalInk.current, modifier = Modifier.weight(0.8f))
+                        Text(r.meterNo.ifBlank { m.number }.ifBlank { "–" }, fontSize = 11.5.sp, color = LocalInk.current, modifier = Modifier.weight(1.4f), maxLines = 1)
+                        Text(Calc.num(r.value, 3).trimEnd('0').trimEnd(','), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = LocalInk.current, modifier = Modifier.weight(1.1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                        PhotoThumb(vm, r.photo, 48)
+                        if (r.photo == null) Box(Modifier.size(48.dp))
                     }
-                    PhotoThumb(vm, r.photo, 48)
+                    if (prev != null) Text("+" + Calc.num(r.value - prev.value, 1) + " " + m.type.unit + " seit " + Calc.dateText(prev.date) + (if (r.viaOcr) " · per Foto" else ""), fontSize = 11.sp, color = LocalMuted.current)
                 }
                 Box(Modifier.fillMaxWidth().height(6.dp))
+            }
+            if (rs.isNotEmpty()) TextButton(onClick = { shareText(ctx, "Zaehlerstaende-" + m.name.replace(" ", "_") + ".csv", "text/csv", Calc.readingsCsv(vm.data.copy(meters = listOf(m)))) }) {
+                Text("Tabelle als CSV teilen (Excel)", color = LocalInk.current, fontSize = 13.sp)
             }
         }
     }
@@ -192,12 +209,13 @@ private fun MeterDialog(initial: Meter?, newId: () -> String, onSave: (Meter) ->
     var number by remember { mutableStateOf(initial?.number ?: "") }
     var price by remember { mutableStateOf(initial?.priceCt?.takeIf { it > 0 }?.let { Calc.num(it, 2) } ?: "") }
     var base by remember { mutableStateOf(initial?.baseEurMonth?.takeIf { it > 0 }?.let { Calc.num(it, 2) } ?: "") }
+    var dec by remember { mutableStateOf(initial?.decimals ?: type.defaultDecimals) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "Neuer Zähler" else "Zähler ändern") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Choice(MeterType.values().toList(), type, { it.label + " (" + it.unit + ")" }) { type = it }
+                Choice(MeterType.values().toList(), type, { it.label + " (" + it.unit + ")" }) { type = it; if (initial == null) dec = it.defaultDecimals }
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (z. B. Strom Haus)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = number, onValueChange = { number = it }, label = { Text("Zählernummer (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
@@ -209,12 +227,15 @@ private fun MeterDialog(initial: Meter?, newId: () -> String, onSave: (Meter) ->
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth()
                 )
                 Hint("Mit Preisen schätzt die App die Kosten aus dem Verbrauch.")
+                Text("Nachkommastellen auf dem Zählwerk (rote Ziffern)", fontSize = 12.sp)
+                Choice(listOf(0, 1, 2, 3), dec, { it.toString() }) { dec = it }
+                Hint("Zeigt das Zählwerk zum Beispiel 00123 und rot 456, wähle 3. Dann liest die App aus 123456 den Stand 123,456. Steht im Foto ein Komma, gilt das Komma.")
                 if (initial != null) TextButton(onClick = onDelete) { Text("Zähler mit allen Ablesungen löschen", color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(Meter(initial?.id ?: newId(), name.trim().ifBlank { type.label }, type, number.trim(), Calc.parseNumber(price) ?: 0.0, Calc.parseNumber(base) ?: 0.0))
+                onSave(Meter(initial?.id ?: newId(), name.trim().ifBlank { type.label }, type, number.trim(), Calc.parseNumber(price) ?: 0.0, Calc.parseNumber(base) ?: 0.0, dec))
             }) { Text("Speichern") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
@@ -226,31 +247,47 @@ private fun MeterDialog(initial: Meter?, newId: () -> String, onSave: (Meter) ->
 private fun ReadingDialog(vm: MainViewModel, m: Meter, initial: Reading?, onDone: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var value by remember { mutableStateOf(initial?.let { Calc.num(it.value, 2).replace(".", "") } ?: "") }
+    var value by remember { mutableStateOf(initial?.let { Calc.num(it.value, 3).replace(".", "").trimEnd('0').trimEnd(',') } ?: "") }
     var date by remember { mutableStateOf(initial?.date ?: LocalDate.now().toEpochDay()) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     var photo by remember { mutableStateOf(initial?.photo) }
     var viaOcr by remember { mutableStateOf(initial?.viaOcr ?: false) }
     var cands by remember { mutableStateOf<List<String>>(emptyList()) }
+    var nums by remember { mutableStateOf<List<String>>(emptyList()) }
+    var meterNo by remember { mutableStateOf(initial?.meterNo?.ifBlank { m.number } ?: m.number) }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
     var pending by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var cropBmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    val prev = Calc.readingsOf(vm.data, m.id).filter { it.id != initial?.id && it.date <= date }.lastOrNull()
 
     fun process(uri: Uri) {
         scope.launch {
             busy = true
             msg = null
-            val c = Ocr.candidates(ctx, uri)
             vm.keepPhoto(uri)?.let { newName ->
                 if (photo != null && photo != initial?.photo) vm.store.deletePhoto(photo)
                 photo = newName
             }
-            cands = c
-            if (c.isEmpty()) msg = "Keine Zahl erkannt. Gib den Stand von Hand ein oder mache ein neues Foto aus der Nähe."
+            val bmp = withContext(Dispatchers.Default) { Ocr.loadBitmap(ctx, uri) }
+            busy = false
+            if (bmp == null) msg = "Das Foto konnte nicht geladen werden." else cropBmp = bmp
+        }
+    }
+
+    fun read(full: android.graphics.Bitmap, crop: android.graphics.Bitmap?) {
+        scope.launch {
+            busy = true
+            val r = withContext(Dispatchers.Default) { Ocr.readMeter(full, crop ?: full, prev?.value, m.decimals) }
+            cands = r.values
+            nums = r.numbers
+            if (r.numbers.isNotEmpty() && (meterNo.isBlank() || m.number.isBlank())) meterNo = r.numbers.first()
+            if (r.values.isEmpty()) msg = "Keine Zahl erkannt. Nimm das Foto aus der Nähe, ohne Spiegelung, oder wähle den Ausschnitt enger."
             else {
-                value = c.first().replace('.', ',')
+                value = r.values.first().replace('.', ',')
                 viaOcr = true
-                msg = "Erkannt: " + c.first().replace('.', ',') + ". Bitte mit dem Zähler vergleichen."
+                msg = "Erkannt: " + value + ". Bitte mit dem Zähler vergleichen."
             }
             busy = false
         }
@@ -260,9 +297,12 @@ private fun ReadingDialog(vm: MainViewModel, m: Meter, initial: Reading?, onDone
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) process(uri) }
 
     val v = Calc.parseNumber(value)
-    val prev = Calc.readingsOf(vm.data, m.id).filter { it.id != initial?.id && it.date <= date }.lastOrNull()
     fun cleanup() {
         if (photo != initial?.photo) vm.store.deletePhoto(photo)
+    }
+
+    cropBmp?.let { b ->
+        CropDialog(b, onCancel = { cropBmp = null }, onDone = { c -> cropBmp = null; read(b, c) })
     }
 
     AlertDialog(
@@ -270,20 +310,21 @@ private fun ReadingDialog(vm: MainViewModel, m: Meter, initial: Reading?, onDone
         title = { Text(if (initial == null) "Ablesen: " + m.name else "Ablesung ändern") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(modifier = Modifier.weight(1f), onClick = {
                         val dir = File(ctx.cacheDir, "aufnahmen").also { it.mkdirs() }
                         val f = File(dir, "z_" + System.currentTimeMillis() + ".jpg")
                         val u = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
                         pending = u
                         take.launch(u)
-                    }) { Text("📷 Foto") }
-                    OutlinedButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("Galerie") }
+                    }) { Text("📷 Foto", maxLines = 1) }
+                    Button(modifier = Modifier.weight(1f), onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("🖼 Galerie", maxLines = 1) }
                 }
-                if (busy) Text("Zahl wird gelesen …", fontSize = 13.sp, color = Gold)
-                msg?.let { Text(it, fontSize = 12.5.sp, color = Muted) }
+                Hint("Tipp: Nach dem Foto rahmst du die Ziffern ein. Das macht die Erkennung deutlich besser. Bei Spiegelung im Display leicht schräg fotografieren, bei dunklem Display ohne Blitz.")
+                if (busy) Text("Wird gelesen …", fontSize = 13.sp, color = Gold)
+                msg?.let { Text(it, fontSize = 12.5.sp) }
                 if (cands.size > 1) {
-                    Text("Weitere erkannte Zahlen:", fontSize = 12.sp)
+                    Text("Weitere Möglichkeiten:", fontSize = 12.sp)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         cands.drop(1).forEach { c -> AssistChip(onClick = { value = c.replace('.', ','); viaOcr = true }, label = { Text(c.replace('.', ',')) }) }
                     }
@@ -296,7 +337,18 @@ private fun ReadingDialog(vm: MainViewModel, m: Meter, initial: Reading?, onDone
                 if (v != null && prev != null && v < prev.value) {
                     Text("Der Stand liegt unter dem letzten Stand (" + Calc.num(prev.value, 1) + "). Zählerwechsel oder Tippfehler?", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error)
                 }
+                OutlinedTextField(value = meterNo, onValueChange = { meterNo = it }, label = { Text("Zählernummer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (nums.size > 1 || (nums.isNotEmpty() && nums.first() != meterNo)) {
+                    Text("Zählernummer im Foto gefunden:", fontSize = 12.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        nums.forEach { n -> AssistChip(onClick = { meterNo = n }, label = { Text(n) }) }
+                    }
+                }
+                if (m.number.isNotBlank() && meterNo.isNotBlank() && !meterNo.equals(m.number, ignoreCase = true)) {
+                    Text("Die Nummer weicht von der des Zählers (" + m.number + ") ab. Zählerwechsel? Dann wird die neue Nummer beim Speichern übernommen.", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
                 DateField("Datum", date) { date = it }
+                Text("Uhrzeit: " + (Calc.timeText(initial?.timeMin ?: if (date == LocalDate.now().toEpochDay()) java.time.LocalTime.now().let { it.hour * 60 + it.minute } else -1).ifBlank { "keine Angabe" }), fontSize = 12.5.sp)
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Notiz (optional)") }, modifier = Modifier.fillMaxWidth())
                 if (initial != null) TextButton(onClick = { vm.deleteReading(initial.id); onDone() }) { Text("Ablesung löschen", color = MaterialTheme.colorScheme.error) }
             }
@@ -304,7 +356,11 @@ private fun ReadingDialog(vm: MainViewModel, m: Meter, initial: Reading?, onDone
         confirmButton = {
             TextButton(enabled = v != null && !busy, onClick = {
                 if (initial != null && initial.photo != null && initial.photo != photo) vm.store.deletePhoto(initial.photo)
-                vm.saveReading(Reading(initial?.id ?: vm.newId(), m.id, date, v ?: 0.0, photo, viaOcr, note.trim()))
+                val now = java.time.LocalTime.now()
+                val t = initial?.timeMin ?: if (date == LocalDate.now().toEpochDay()) now.hour * 60 + now.minute else -1
+                val no = meterNo.trim()
+                if (no.isNotBlank() && !no.equals(m.number, ignoreCase = true)) vm.saveMeter(m.copy(number = no))
+                vm.saveReading(Reading(initial?.id ?: vm.newId(), m.id, date, v ?: 0.0, photo, viaOcr, note.trim(), t, no))
                 onDone()
             }) { Text("Speichern") }
         },

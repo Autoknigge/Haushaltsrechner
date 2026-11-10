@@ -73,11 +73,11 @@ enum class SplitMode(val label: String) {
     BY_INCOME("Nach Einkommen")
 }
 
-enum class MeterType(val label: String, val unit: String) {
-    STROM("Strom", "kWh"),
-    GAS("Gas", "m³"),
-    WASSER("Wasser", "m³"),
-    WAERME("Wärme", "kWh")
+enum class MeterType(val label: String, val unit: String, val defaultDecimals: Int) {
+    STROM("Strom", "kWh", 0),
+    GAS("Gas", "m³", 3),
+    WASSER("Wasser", "m³", 3),
+    WAERME("Wärme", "kWh", 0)
 }
 
 private inline fun <reified T : Enum<T>> enumOf(s: String?, fallback: T): T =
@@ -160,16 +160,21 @@ data class Meter(
     val type: MeterType,
     val number: String = "",
     val priceCt: Double = 0.0,
-    val baseEurMonth: Double = 0.0
+    val baseEurMonth: Double = 0.0,
+    /** Ziffern hinter dem Komma auf dem Zählwerk (rote Ziffern), wenn das Foto sie ohne Komma zeigt. */
+    val decimals: Int = type.defaultDecimals
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("type", type.name)
-        .put("number", number).put("priceCt", priceCt).put("base", baseEurMonth)
+        .put("number", number).put("priceCt", priceCt).put("base", baseEurMonth).put("dec", decimals)
 
     companion object {
-        fun fromJson(o: JSONObject) = Meter(
-            o.getString("id"), o.optString("name"), enumOf(o.optString("type"), MeterType.STROM),
-            o.optString("number"), o.optDouble("priceCt", 0.0), o.optDouble("base", 0.0)
-        )
+        fun fromJson(o: JSONObject): Meter {
+            val t = enumOf(o.optString("type"), MeterType.STROM)
+            return Meter(
+                o.getString("id"), o.optString("name"), t,
+                o.optString("number"), o.optDouble("priceCt", 0.0), o.optDouble("base", 0.0), o.optInt("dec", t.defaultDecimals)
+            )
+        }
     }
 }
 
@@ -180,15 +185,20 @@ data class Reading(
     val value: Double,
     val photo: String? = null,
     val viaOcr: Boolean = false,
-    val note: String = ""
+    val note: String = "",
+    /** Uhrzeit der Ablesung in Minuten seit Mitternacht, -1 = unbekannt. */
+    val timeMin: Int = -1,
+    /** Zählernummer zum Zeitpunkt der Ablesung. */
+    val meterNo: String = ""
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("meter", meterId).put("date", date).put("value", value)
-        .put("photo", photo ?: JSONObject.NULL).put("ocr", viaOcr).put("note", note)
+        .put("photo", photo ?: JSONObject.NULL).put("ocr", viaOcr).put("note", note).put("time", timeMin).put("mno", meterNo)
 
     companion object {
         fun fromJson(o: JSONObject) = Reading(
             o.getString("id"), o.getString("meter"), o.getLong("date"), o.getDouble("value"),
-            if (o.isNull("photo")) null else o.optString("photo"), o.optBoolean("ocr"), o.optString("note")
+            if (o.isNull("photo")) null else o.optString("photo"), o.optBoolean("ocr"), o.optString("note"),
+            o.optInt("time", -1), o.optString("mno")
         )
     }
 }
