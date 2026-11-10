@@ -54,6 +54,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
     var importOpen by remember { mutableStateOf(false) }
     var wipeMonth by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
+    var reviewOpen by remember { mutableStateOf(false) }
     val d = vm.data
     val defaultDay = if (YearMonth.from(LocalDate.now()) == ym) LocalDate.now().toEpochDay() else ym.atDay(1).toEpochDay()
     fun who(id: String?) = d.persons.firstOrNull { it.id == id }?.name
@@ -144,6 +145,9 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                 }
             }
         } else {
+            Button(modifier = Modifier.fillMaxWidth(), onClick = { reviewOpen = true }) { Text("🔎 Regelmäßige Zahlungen finden") }
+            MonthBar(ym, onMonth)
+            CashPreview(vm, ym, onMonth)
             val exp = d.recurrings.filter { !it.income }.sumOf { Calc.perMonth(it) }
             val inc = d.recurrings.filter { it.income }.sumOf { Calc.perMonth(it) }
             HCard("Regelmäßige Zahlungen und Einnahmen", bg = TileToday) {
@@ -222,6 +226,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             onDismiss = { newRec = false; recDialog = null }
         )
     }
+    if (reviewOpen) RecurringReviewDialog(vm) { reviewOpen = false }
     if (wipeMonth) {
         val inMonth = d.entries.filter { YearMonth.from(Calc.day(it.date)) == ym }
         val imported = inMonth.count { it.note == "per Foto importiert" }

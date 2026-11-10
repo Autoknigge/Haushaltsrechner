@@ -251,7 +251,9 @@ data class Data(
     val split: SplitMode = SplitMode.EQUAL,
     val household: String = "",
     val address: String = "",
-    val rules: List<Rule> = emptyList()
+    val rules: List<Rule> = emptyList(),
+    /** Zahlergruppen, die der Nutzer als „nicht regelmäßig“ markiert hat. */
+    val dismissed: List<String> = emptyList()
 ) {
     /** Alle bekannten Ausgaben-Kategorien: Vorgaben, gelernte und bereits benutzte. */
     fun expenseCategories(): List<Category> =
@@ -274,6 +276,7 @@ data class Data(
         .put("household", household)
         .put("address", address)
         .put("rules", JSONArray().also { a -> rules.forEach { a.put(it.toJson()) } })
+        .put("dismissed", JSONArray().also { a -> dismissed.forEach { a.put(it) } })
 
     companion object {
         private fun <T> list(o: JSONObject, key: String, f: (JSONObject) -> T): List<T> {
@@ -286,7 +289,8 @@ data class Data(
             list(o, "meters", { Meter.fromJson(it) }), list(o, "readings", { Reading.fromJson(it) }),
             list(o, "persons", { Person.fromJson(it) }), enumOf(o.optString("split"), SplitMode.EQUAL),
             o.optString("household"), o.optString("address"),
-            list(o, "rules", { Rule.fromJson(it) })
+            list(o, "rules", { Rule.fromJson(it) }),
+            (o.optJSONArray("dismissed")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList())
         )
     }
 }

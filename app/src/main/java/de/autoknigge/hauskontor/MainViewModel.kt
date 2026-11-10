@@ -119,6 +119,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         commit(data.copy(entries = data.entries.filter { !(it.date in from..to && (!onlyImported || it.note == "per Foto importiert")) }))
     }
 
+    fun dismissGroup(key: String) = commit(data.copy(dismissed = (data.dismissed + key).distinct()))
+    fun resetDismissed() = commit(data.copy(dismissed = emptyList()))
+
     fun setSplit(mode: SplitMode) = commit(data.copy(split = mode))
 
     /** Spielt eine Sicherung ein: entweder alles ersetzen oder fehlende Einträge hinzufügen. */
