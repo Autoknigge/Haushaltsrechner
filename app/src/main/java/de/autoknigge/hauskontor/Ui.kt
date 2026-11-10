@@ -143,12 +143,54 @@ fun Stat(label: String, value: String, color: Color = Color.Unspecified, modifie
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MonthBar(ym: YearMonth, onMonth: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { onMonth(-1) }) { Text("‹", fontSize = 22.sp) }
-        Text(Calc.monthText(ym), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Row(
+            Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { open = true }.padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(Calc.monthText(ym), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
+            Text("  ▾", fontSize = 16.sp, color = Gold)
+        }
         TextButton(onClick = { onMonth(1) }) { Text("›", fontSize = 22.sp) }
+    }
+    if (open) {
+        var year by remember { mutableIntStateOf(ym.year) }
+        val now = YearMonth.now()
+        fun go(y: Int, m: Int) {
+            onMonth((y * 12 + m) - (ym.year * 12 + ym.monthValue))
+            open = false
+        }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { open = false },
+            containerColor = Panel, textContentColor = Color.White, titleContentColor = Gold,
+            title = { Text("Monat wählen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { year-- }) { Text("‹", fontSize = 24.sp) }
+                        Text(year.toString(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        TextButton(onClick = { year++ }) { Text("›", fontSize = 24.sp) }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (1..12).forEach { m ->
+                            FilterChip(
+                                colors = chipColors(),
+                                selected = year == ym.year && m == ym.monthValue,
+                                onClick = { go(year, m) },
+                                label = { Text(Calc.monthShort(m), fontSize = 15.sp) }
+                            )
+                        }
+                    }
+                    TextButton(onClick = { go(now.year, now.monthValue) }) { Text("Heute: " + Calc.monthText(now), color = Gold) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { open = false }) { Text("Schließen") } }
+        )
     }
 }
 
