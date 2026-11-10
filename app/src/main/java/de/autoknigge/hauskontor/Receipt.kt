@@ -41,7 +41,7 @@ object Receipts {
     }
 
     /** Zeilen mit Salden oder Summen sind keine Zahlungen. */
-    private val balanceRx = Regex("saldo|kontostand|anfangsbestand|endbestand|schlusssaldo|übertrag|uebertrag|tagessaldo|summe|umsätze gesamt", RegexOption.IGNORE_CASE)
+    private val balanceRx = Regex("saldo|kontostand|anfangsbestand|endbestand|schlusssaldo|tagessaldo|summe|umsätze gesamt", RegexOption.IGNORE_CASE)
 
     /**
      * Zahlungen aus den Zeilen eines Kontoauszugs. Eine Zeile mit Datum am Anfang beginnt eine neue Buchung.
@@ -90,7 +90,10 @@ object Receipts {
             if (balanceRx.containsMatchIn(row)) continue
             val dm = dateRx.find(row)
             val am = rx.findAll(row).firstOrNull { dm == null || it.range.first > dm.range.last - 1 } ?: rx.find(row)
-            val startsBooking = dm != null && (dm.range.first <= 3 || am != null)
+            // Zweites Datum (Wertstellung) steht oft in der Folgezeile derselben Buchung: kein neuer Posten.
+            val rowDate = dm?.let { toEpoch(it.groupValues[1], it.groupValues[2], it.groupValues[3], today, yearHint) }
+            val sameDay = rowDate != null && cur?.date == rowDate && am == null
+            val startsBooking = dm != null && !sameDay && (dm.range.first <= 3 || am != null)
             if (startsBooking) {
                 finish()
                 val date = toEpoch(dm!!.groupValues[1], dm.groupValues[2], dm.groupValues[3], today, yearHint) ?: continue
