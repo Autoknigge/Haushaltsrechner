@@ -153,7 +153,50 @@ object Calc {
         return if (covered) sum else null
     }
 
-    fun cost(m: Meter, consumption: Double): Double = consumption * m.priceCt / 100.0 + m.baseEurMonth
+    /** Arbeitspreis (ct) und Grundpreis (Euro je Monat), die an einem Tag gelten. Vor dem ersten Stichtag gilt der Anfangstarif. */
+    fun priceAt(m: Meter, day: Long): Pair<Double, Double> {
+        val t = m.tariffs.filter { it.from <= day }.maxByOrNull { it.from }
+        return if (t != null) t.priceCt to t.baseEurMonth else m.priceCt to m.baseEurMonth
+    }
+
+    /** Verbrauch an einem Tag: gleichmäßig verteilt zwischen den beiden Ablesungen, die den Tag umschließen. */
+    fun usageOn(rs: List<Reading>, day: Long): Double {
+        for (i in 1 until rs.size) {
+            val a = rs[i - 1]
+            val b = rs[i]
+            if (b.date > a.date && day >= a.date && day < b.date) return (b.value - a.value) / (b.date - a.date)
+        }
+        return 0.0
+    }
+
+    fun usedRange(rs: List<Reading>, from: Long, to: Long): Double {
+        var s = 0.0
+        var d = from
+        while (d < to) { s += usageOn(rs, d); d++ }
+        return s
+    }
+
+    /**
+     * Kosten von [from] bis ausschließlich [to]: Verbrauch mal Arbeitspreis des jeweiligen Tages plus Grundpreis.
+     * Mit [bonus] werden Neukunden- und Sofortbonus über 12 Monate ab Tarifstart verteilt abgezogen.
+     */
+    fun costRange(m: Meter, rs: List<Reading>, from: Long, to: Long, bonus: Boolean = true): Double {
+        var sum = 0.0
+        var d = from
+        while (d < to) {
+            val (p, b) = priceAt(m, d)
+            sum += usageOn(rs, d) * p / 100.0 + b * 12.0 / 365.0
+            if (bonus) m.tariffs.forEach { t -> if (d >= t.from && d < t.from + 365) sum -= (t.newBonus + t.instantBonus) / 365.0 }
+            d++
+        }
+        return sum
+    }
+
+    /** Geschätzte Kosten eines Monats, null ohne Ablesungen. */
+    fun monthCost(m: Meter, rs: List<Reading>, ym: YearMonth): Double? =
+        if (consumption(rs, ym) == null) null else costRange(m, rs, ym.atDay(1).toEpochDay(), ym.plusMonths(1).atDay(1).toEpochDay())
+
+    fun hasPrice(m: Meter): Boolean = m.priceCt > 0 || m.baseEurMonth > 0 || m.tariffs.isNotEmpty()
 
     fun timeText(min: Int): String = if (min < 0) "" else String.format(Locale.GERMANY, "%02d:%02d", min / 60, min % 60)
 

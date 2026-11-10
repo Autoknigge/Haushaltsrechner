@@ -129,7 +129,7 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                     if (c == null) {
                         Row2(m.name, "–", sub = "keine Ablesungen für diesen Monat")
                     } else {
-                        val cost = if (m.priceCt > 0 || m.baseEurMonth > 0) " · ca. " + Calc.eur(Math.round(Calc.cost(m, c) * 100)) else ""
+                        val cost = if (Calc.hasPrice(m)) " · ca. " + Calc.eur(Math.round((Calc.monthCost(m, Calc.readingsOf(d, m.id), ym) ?: 0.0) * 100)) else ""
                         Row2(m.name, Calc.num(c, 1) + " " + m.type.unit, sub = "geschätzt aus den Ablesungen$cost")
                     }
                 }

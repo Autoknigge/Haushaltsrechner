@@ -154,6 +154,28 @@ data class Recurring(
 }
 
 /** Zähler. [priceCt] ist der Arbeitspreis in ct je Einheit, [baseEurMonth] der Grundpreis je Monat. */
+/** Tarif ab einem Stichtag: Preise und einmalige Boni. */
+data class Tariff(
+    val from: Long,
+    val priceCt: Double,
+    val baseEurMonth: Double,
+    /** Neukundenbonus in Euro (meist nach 12 Monaten gutgeschrieben). */
+    val newBonus: Double = 0.0,
+    /** Sofortbonus in Euro. */
+    val instantBonus: Double = 0.0,
+    val name: String = ""
+) {
+    fun toJson(): JSONObject = JSONObject().put("from", from).put("price", priceCt).put("base", baseEurMonth)
+        .put("newBonus", newBonus).put("instant", instantBonus).put("name", name)
+
+    companion object {
+        fun fromJson(o: JSONObject) = Tariff(
+            o.getLong("from"), o.optDouble("price", 0.0), o.optDouble("base", 0.0),
+            o.optDouble("newBonus", 0.0), o.optDouble("instant", 0.0), o.optString("name")
+        )
+    }
+}
+
 data class Meter(
     val id: String,
     val name: String,
@@ -162,17 +184,21 @@ data class Meter(
     val priceCt: Double = 0.0,
     val baseEurMonth: Double = 0.0,
     /** Ziffern hinter dem Komma auf dem Zählwerk (rote Ziffern), wenn das Foto sie ohne Komma zeigt. */
-    val decimals: Int = type.defaultDecimals
+    val decimals: Int = type.defaultDecimals,
+    /** Tarifwechsel mit Stichtag. Der Anfangstarif (priceCt, baseEurMonth) gilt bis zum ersten Stichtag. */
+    val tariffs: List<Tariff> = emptyList()
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("type", type.name)
         .put("number", number).put("priceCt", priceCt).put("base", baseEurMonth).put("dec", decimals)
+        .put("tariffs", JSONArray().also { a -> tariffs.forEach { a.put(it.toJson()) } })
 
     companion object {
         fun fromJson(o: JSONObject): Meter {
             val t = enumOf(o.optString("type"), MeterType.STROM)
             return Meter(
                 o.getString("id"), o.optString("name"), t,
-                o.optString("number"), o.optDouble("priceCt", 0.0), o.optDouble("base", 0.0), o.optInt("dec", t.defaultDecimals)
+                o.optString("number"), o.optDouble("priceCt", 0.0), o.optDouble("base", 0.0), o.optInt("dec", t.defaultDecimals),
+                (o.optJSONArray("tariffs")?.let { a -> (0 until a.length()).map { Tariff.fromJson(a.getJSONObject(it)) } } ?: emptyList())
             )
         }
     }

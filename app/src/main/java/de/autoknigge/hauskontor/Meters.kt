@@ -94,8 +94,8 @@ fun MetersScreen(vm: MainViewModel) {
                             val days = (last.date - prev.date).coerceAtLeast(1)
                             val used = last.value - prev.value
                             Row2("Verbrauch seit " + Calc.dateText(prev.date), Calc.num(used, 1) + " " + m.type.unit, sub = "Ø " + Calc.num(used / days, 2) + " " + m.type.unit + " pro Tag")
-                            if (m.priceCt > 0 || m.baseEurMonth > 0) {
-                                Row2("Kosten (geschätzt)", Calc.eur(Math.round((used * m.priceCt / 100.0 + m.baseEurMonth * days / 30.4) * 100)))
+                            if (Calc.hasPrice(m)) {
+                                Row2("Kosten (geschätzt)", Calc.eur(Math.round(Calc.costRange(m, rs, prev.date, last.date, bonus = false) * 100)))
                             }
                         }
                     }
@@ -147,6 +147,35 @@ private fun MeterDetail(vm: MainViewModel, m: Meter, onBack: () -> Unit, onEditR
             MeterType.STROM -> { PartnerButton(Partner.STROM); PartnerNote() }
             MeterType.GAS -> { PartnerButton(Partner.GAS); PartnerNote() }
             else -> {}
+        }
+ 
+        if (Calc.hasPrice(m) && rs.size >= 2) {
+            HCard("Tarife und Kosten", bg = O7, dark = true) {
+                val span0 = rs.first().date
+                val span1 = rs.last().date
+                val periods = buildList {
+                    val ts = m.tariffs.sortedBy { it.from }
+                    if (m.priceCt > 0 || m.baseEurMonth > 0 || ts.isEmpty()) add(Tariff(Long.MIN_VALUE, m.priceCt, m.baseEurMonth, name = "Anfangstarif"))
+                    addAll(ts)
+                }
+                periods.forEachIndexed { i, t ->
+                    val start = maxOf(t.from, span0)
+                    val end = minOf(periods.getOrNull(i + 1)?.from ?: Long.MAX_VALUE, span1)
+                    if (end > start) {
+                        val used = Calc.usedRange(rs, start, end)
+                        val gross = Calc.costRange(m, rs, start, end, bonus = false)
+                        val net = gross - t.newBonus - t.instantBonus
+                        Row2(
+                            (if (t.from == Long.MIN_VALUE) "Bis zur ersten Änderung" else "Ab " + Calc.dateText(t.from)) + (if (t.name.isNotBlank()) " · " + t.name else ""),
+                            Calc.eur(Math.round(net * 100)),
+                            sub = Calc.num(used, 1) + " " + m.type.unit + " · " + Calc.num(t.priceCt, 2) + " ct · " + Calc.num(t.baseEurMonth, 2) + " €/Monat · Kosten " + Calc.eur(Math.round(gross * 100)) +
+                                (if (t.instantBonus > 0) " · Sofortbonus −" + Calc.eur(Math.round(t.instantBonus * 100)) else "") +
+                                (if (t.newBonus > 0) " · Neukundenbonus −" + Calc.eur(Math.round(t.newBonus * 100)) else "")
+                        )
+                    }
+                }
+                Hint("Rechts steht der Betrag nach Abzug der Boni. Neuen Tarif oder Preisänderung unter „Ändern“ beim Zähler eintragen. Die Kosten sind eine Schätzung aus den Ablesungen.")
+            }
         }
         HCard("Ablesungen", bg = O9, dark = true) {
             if (rs.isEmpty()) Hint("Noch keine Ablesung.")
@@ -203,6 +232,38 @@ fun PhotoThumb(vm: MainViewModel, name: String?, sizeDp: Int) {
 }
 
 @Composable
+private fun TariffDialog(initial: Tariff?, type: MeterType, onSave: (Tariff) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    var from by remember { mutableStateOf(initial?.from ?: LocalDate.now().toEpochDay()) }
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    var price by remember { mutableStateOf(initial?.priceCt?.let { Calc.num(it, 2) } ?: "") }
+    var base by remember { mutableStateOf(initial?.baseEurMonth?.let { Calc.num(it, 2) } ?: "") }
+    var nb by remember { mutableStateOf(initial?.newBonus?.takeIf { it > 0 }?.let { Calc.num(it, 2) } ?: "") }
+    var sb by remember { mutableStateOf(initial?.instantBonus?.takeIf { it > 0 }?.let { Calc.num(it, 2) } ?: "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial == null) "Neuer Tarif" else "Tarif ändern") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DateField("Gültig ab", from) { from = it }
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Anbieter / Tarif (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Arbeitspreis in ct je " + type.unit) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = base, onValueChange = { base = it }, label = { Text("Grundpreis in Euro je Monat") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = nb, onValueChange = { nb = it }, label = { Text("Neukundenbonus in Euro") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = sb, onValueChange = { sb = it }, label = { Text("Sofortbonus in Euro") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                Hint("Die Boni verteilt die App für die Monatsschätzung auf die ersten 12 Monate ab dem Stichtag.")
+                if (initial != null) TextButton(onClick = onDelete) { Text("Tarif entfernen", color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(Tariff(from, Calc.parseNumber(price) ?: 0.0, Calc.parseNumber(base) ?: 0.0, Calc.parseNumber(nb) ?: 0.0, Calc.parseNumber(sb) ?: 0.0, name.trim()))
+            }) { Text("Speichern") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
+    )
+}
+
+@Composable
 private fun MeterDialog(initial: Meter?, newId: () -> String, onSave: (Meter) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
     var type by remember { mutableStateOf(initial?.type ?: MeterType.STROM) }
     var name by remember { mutableStateOf(initial?.name ?: "") }
@@ -210,6 +271,17 @@ private fun MeterDialog(initial: Meter?, newId: () -> String, onSave: (Meter) ->
     var price by remember { mutableStateOf(initial?.priceCt?.takeIf { it > 0 }?.let { Calc.num(it, 2) } ?: "") }
     var base by remember { mutableStateOf(initial?.baseEurMonth?.takeIf { it > 0 }?.let { Calc.num(it, 2) } ?: "") }
     var dec by remember { mutableStateOf(initial?.decimals ?: type.defaultDecimals) }
+    var tariffs by remember { mutableStateOf(initial?.tariffs ?: emptyList()) }
+    var tariffEdit by remember { mutableStateOf<Tariff?>(null) }
+    var tariffNew by remember { mutableStateOf(false) }
+    if (tariffNew || tariffEdit != null) {
+        TariffDialog(
+            tariffEdit, type,
+            onSave = { t -> tariffs = (tariffs.filter { it != tariffEdit } + t).sortedBy { it.from }; tariffNew = false; tariffEdit = null },
+            onDelete = { tariffs = tariffs.filter { it != tariffEdit }; tariffNew = false; tariffEdit = null },
+            onDismiss = { tariffNew = false; tariffEdit = null }
+        )
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "Neuer Zähler" else "Zähler ändern") },
@@ -219,14 +291,22 @@ private fun MeterDialog(initial: Meter?, newId: () -> String, onSave: (Meter) ->
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (z. B. Strom Haus)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = number, onValueChange = { number = it }, label = { Text("Zählernummer (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
-                    value = price, onValueChange = { price = it }, label = { Text("Arbeitspreis in ct je " + type.unit + " (optional)") }, singleLine = true,
+                    value = price, onValueChange = { price = it }, label = { Text("Anfangstarif: Arbeitspreis in ct je " + type.unit) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = base, onValueChange = { base = it }, label = { Text("Grundpreis in Euro je Monat (optional)") }, singleLine = true,
+                    value = base, onValueChange = { base = it }, label = { Text("Anfangstarif: Grundpreis in Euro je Monat") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth()
                 )
-                Hint("Mit Preisen schätzt die App die Kosten aus dem Verbrauch.")
+                Hint("Mit Preisen schätzt die App die Kosten aus dem Verbrauch. Der Anfangstarif gilt bis zur ersten Tarifänderung.")
+                Text("Tarifänderungen", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                tariffs.sortedBy { it.from }.forEach { t ->
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { tariffEdit = t }) {
+                        Text("ab " + Calc.dateText(t.from) + " · " + Calc.num(t.priceCt, 2) + " ct · " + Calc.num(t.baseEurMonth, 2) + " €/Monat" +
+                            (if (t.newBonus > 0 || t.instantBonus > 0) " · Bonus " + Calc.num(t.newBonus + t.instantBonus, 0) + " €" else ""), fontSize = 12.sp, maxLines = 2)
+                    }
+                }
+                Button(onClick = { tariffNew = true }) { Text("+ Neuer Tarif ab Stichtag") }
                 Text("Nachkommastellen auf dem Zählwerk (rote Ziffern)", fontSize = 12.sp)
                 Choice(listOf(0, 1, 2, 3), dec, { it.toString() }) { dec = it }
                 Hint("Zeigt das Zählwerk zum Beispiel 00123 und rot 456, wähle 3. Dann liest die App aus 123456 den Stand 123,456. Steht im Foto ein Komma, gilt das Komma.")
@@ -235,7 +315,7 @@ private fun MeterDialog(initial: Meter?, newId: () -> String, onSave: (Meter) ->
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(Meter(initial?.id ?: newId(), name.trim().ifBlank { type.label }, type, number.trim(), Calc.parseNumber(price) ?: 0.0, Calc.parseNumber(base) ?: 0.0, dec))
+                onSave(Meter(initial?.id ?: newId(), name.trim().ifBlank { type.label }, type, number.trim(), Calc.parseNumber(price) ?: 0.0, Calc.parseNumber(base) ?: 0.0, dec, tariffs.sortedBy { it.from }))
             }) { Text("Speichern") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
