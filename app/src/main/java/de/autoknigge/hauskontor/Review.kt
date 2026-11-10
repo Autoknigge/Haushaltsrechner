@@ -54,7 +54,7 @@ class Cand(val key: String, val income: Boolean, val entries: List<Entry>) {
             if (best != null) {
                 val base = best.months * 30.4
                 val k = Math.max(1.0, Math.round(d / base).toDouble())
-                if (Math.abs(d - k * base) / (k * base) < 0.2) votes[best] = (votes[best] ?: 0) + 1
+                if (Math.abs(d - k * base) / (k * base) < 0.15 && k <= (if (best == Interval.MONTHLY) 3.0 else 2.0)) votes[best] = (votes[best] ?: 0) + 1
             }
         }
         return votes.maxByOrNull { it.value }?.key
@@ -120,7 +120,7 @@ fun RecurringReviewDialog(vm: MainViewModel, onDismiss: () -> Unit) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (g != null) Text("anders:", fontSize = 12.sp, color = LocalMuted.current, modifier = Modifier.padding(top = 10.dp))
                             Interval.values().filter { it != g }.forEach { iv ->
-                                androidx.compose.material3.AssistChip(onClick = { make(iv) }, label = { Text(iv.label, fontSize = 13.sp) })
+                                androidx.compose.material3.AssistChip(onClick = { make(iv) }, label = { Text(iv.label, fontSize = 13.sp, color = LocalInk.current) })
                             }
                             OutlinedButton(onClick = { vm.dismissGroup(c.id) }) { Text("Nein", color = LocalInk.current) }
                         }
