@@ -70,6 +70,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Stat("Ausgaben", Calc.eur(s.expense))
                     Stat("Einnahmen", Calc.eur(s.income))
+                    Stat("Saldo", signed(s.income - s.expense))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

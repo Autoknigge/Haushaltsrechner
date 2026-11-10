@@ -31,10 +31,14 @@ object Receipts {
         null
     }
 
+    /** Zeilen mit Salden oder Summen sind keine Zahlungen. */
+    private val balanceRx = Regex("saldo|kontostand|anfangsbestand|endbestand|schlusssaldo|übertrag|uebertrag|tagessaldo|summe|umsätze gesamt|guthaben|verfügbar", RegexOption.IGNORE_CASE)
+
     fun statement(rows: List<String>, today: LocalDate = LocalDate.now()): List<Found> {
         val out = ArrayList<Found>()
         val rx = amountRx(true)
         for (row in rows) {
+            if (balanceRx.containsMatchIn(row)) continue
             val dm = dateRx.find(row) ?: continue
             val date = toEpoch(dm.groupValues[1], dm.groupValues[2], dm.groupValues[3], today) ?: continue
             val am = rx.findAll(row).firstOrNull { it.range.first > dm.range.last - 1 } ?: rx.find(row) ?: continue

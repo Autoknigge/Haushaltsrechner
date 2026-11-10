@@ -42,6 +42,7 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Stat("Ausgaben", Calc.eur(s.expense))
                 Stat("Einnahmen", Calc.eur(s.income))
+                Stat("Saldo", signed(s.income - s.expense))
             }
             if (lines.isEmpty()) Hint("Noch keine Buchungen in diesem Monat. Lege unter „Buch“ Buchungen, Einnahmen und Fixkosten an.")
         }

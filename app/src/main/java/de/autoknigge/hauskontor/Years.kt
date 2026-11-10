@@ -99,6 +99,7 @@ private fun YearView(vm: MainViewModel) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Stat("Ausgaben", Calc.eur(s.expense))
             Stat("Einnahmen", Calc.eur(s.income))
+            Stat("Saldo", (if (s.income - s.expense >= 0) "+ " else "− ") + Calc.eur(Math.abs(s.income - s.expense)))
         }
         Hint("Ø Ausgaben je Monat: " + Calc.eur(s.expense / 12) + (if (s.income > 0) " · Ø Einnahmen: " + Calc.eur(s.income / 12) else ""))
     }
@@ -189,8 +190,8 @@ private fun MultiYearView(d: Data) {
             val prev = sums[y - 1]
             Row2(
                 y.toString(),
-                e0(s.expense),
-                sub = "Einnahmen " + e0(s.income) +
+                "Saldo " + signed0(s.income - s.expense),
+                sub = "Ausgaben " + e0(s.expense) + " · Einnahmen " + e0(s.income) +
                     (if (prev != null && prev.expense > 0) " · Ausgaben zum Vorjahr " + signed0(s.expense - prev.expense) + " (" + pct(prev.expense.toDouble(), s.expense.toDouble()) + ")" else "")
             )
         }
@@ -263,6 +264,7 @@ private fun CompareView(d: Data) {
             val y = sb.incomeByKind[k] ?: 0L
             if (x != 0L || y != 0L) CmpRow("  " + k.label, x.toDouble(), y.toDouble(), money, false)
         }
+        CmpRow("Saldo", (sa.income - sa.expense).toDouble(), (sb.income - sb.expense).toDouble(), money, false, true)
         Hint("A und B sind zwei Zeiträume gleicher Länge. Rot heißt: mehr Ausgaben beziehungsweise weniger Einnahmen als in A.")
     }
 
