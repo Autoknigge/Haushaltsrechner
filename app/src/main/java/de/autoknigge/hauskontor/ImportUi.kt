@@ -202,6 +202,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                     if (rows.isEmpty()) {
                         Text("Keine Zeilen mit Datum und Betrag erkannt. Versuche ein schärferes Foto oder wechsle auf „Rechnung / Beleg“.", fontSize = 12.5.sp)
                     } else {
+                        Text("Gelesen mit: " + (Ocr.method.ifBlank { "Texterkennung (Foto)" }) + " · " + (scan?.rows?.size ?: 0) + " Zeilen · " + rows.size + " Zahlungen erkannt · " + leftovers.size + " Zeilen mit Betrag nicht zugeordnet", fontSize = 11.5.sp, color = Gold)
                         Text("Erkannte Zahlungen. Haken entfernen, was nicht übernommen werden soll. Mit „±“ wechselst du zwischen Ausgabe und Einnahme.", fontSize = 12.5.sp)
                         rows.forEachIndexed { i, r ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

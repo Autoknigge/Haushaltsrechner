@@ -34,6 +34,9 @@ object Ocr {
     /** Letzte Fehlermeldung beim Einlesen (für die Anzeige). */
     var error: String? = null
 
+    /** Womit zuletzt gelesen wurde (für die Anzeige). */
+    var method: String = ""
+
     private fun isPdf(ctx: Context, uri: Uri): Boolean {
         if (ctx.contentResolver.getType(uri) == "application/pdf") return true
         return try {
@@ -43,6 +46,7 @@ object Ocr {
 
     suspend fun scan(ctx: Context, uri: Uri): Scan? {
         error = null
+        method = ""
         return try {
             if (isPdf(ctx, uri)) scanPdf(ctx, uri) else recognize(InputImage.fromFilePath(ctx, uri))
         } catch (e: SecurityException) {
@@ -69,6 +73,7 @@ object Ocr {
                 val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
                 if (lines.count { Regex("\\d{1,2}\\.\\d{1,2}\\.").containsMatchIn(it) } >= 2) {
                     tmp.delete()
+                    method = "Textschicht des PDFs"
                     return Scan(text, lines)
                 }
             }
@@ -93,6 +98,7 @@ object Ocr {
             }
         }
         tmp.delete()
+        method = "Texterkennung (Bild), PDF ohne lesbare Textschicht"
         return if (rows.isEmpty()) null else Scan(text.toString(), rows)
     }
 
