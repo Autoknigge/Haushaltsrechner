@@ -167,10 +167,10 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                     TextButton(onClick = {
                         val i = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(android.content.Intent.EXTRA_TEXT, scan!!.rows.joinToString("\n"))
+                            putExtra(android.content.Intent.EXTRA_TEXT, scan!!.rows.joinToString("\n") { Receipts.anonymize(it) })
                         }
                         ctx.startActivity(android.content.Intent.createChooser(i, "Erkannten Text teilen"))
-                    }) { Text("Erkannten Text teilen (zur Fehlersuche)", fontSize = 12.sp) }
+                    }) { Text("Erkannten Text anonymisiert teilen (Fehlersuche)", fontSize = 12.sp) }
                 }
 
                 if (scan != null && !failed && !statementMode) {

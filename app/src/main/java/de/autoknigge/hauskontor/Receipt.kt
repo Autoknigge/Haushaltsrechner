@@ -48,7 +48,18 @@ object Receipts {
     }
 
     /** Wie [statement], liefert aber zusätzlich die Zeilen mit Betrag, die keiner Buchung zugeordnet werden konnten. */
-    fun statementFull(rows: List<String>, today: LocalDate = LocalDate.now()): Pair<List<Found>, List<String>> {
+    private val months = listOf("jan", "feb", "mär", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "dez")
+    private val monthNo = mapOf("jan" to 1, "feb" to 2, "mär" to 3, "mar" to 3, "apr" to 4, "mai" to 5, "jun" to 6, "jul" to 7, "aug" to 8, "sep" to 9, "okt" to 10, "nov" to 11, "dez" to 12)
+    private val isoRx = Regex("(\\d{4})-(\\d{2})-(\\d{2})")
+    private val nameRx = Regex("(?<![\\d])(\\d{1,2})\\.?\\s+(${months.joinToString("|")})[a-zäöü]*\\.?\\s+(\\d{4})", RegexOption.IGNORE_CASE)
+
+    /** Andere Datumsformen (2025-10-01, 1. Okt. 2025) werden in 01.10.2025 umgeschrieben. */
+    private fun normalizeDates(row: String): String =
+        row.replace(isoRx) { "${it.groupValues[3]}.${it.groupValues[2]}.${it.groupValues[1]}" }
+            .replace(nameRx) { m -> "%02d.%02d.%s".format(m.groupValues[1].toInt(), monthNo[m.groupValues[2].lowercase().take(3)] ?: 1, m.groupValues[3]) }
+
+    fun statementFull(rowsIn: List<String>, today: LocalDate = LocalDate.now()): Pair<List<Found>, List<String>> {
+        val rows = rowsIn.map { normalizeDates(it) }
         class Cur(val date: Long, val parts: MutableList<String>, var cents: Long? = null, var income: Boolean = false)
         val out = ArrayList<Found>()
         val rx = amountRx(true)
@@ -108,6 +119,10 @@ object Receipts {
         finish()
         return out.distinct() to left
     }
+
+    /** Für die Fehlersuche: Buchstaben werden zu x, lange Zahlen (IBAN, Konto) zu 9; Datum, Beträge und Aufbau bleiben. */
+    fun anonymize(row: String): String =
+        row.replace(Regex("[A-ZÄÖÜ]")) { "X" }.replace(Regex("[a-zäöüß]")) { "x" }.replace(Regex("\\d{7,}")) { "9".repeat(it.value.length) }
 
     private val keywords = listOf("summe", "gesamt", "total", "zu zahlen", "endbetrag", "rechnungsbetrag", "brutto", "betrag", "bar", "visa", "ec")
 
