@@ -210,7 +210,7 @@ private fun EntryDialog(
     var cat by remember { mutableStateOf((initial?.category ?: Category.EINKAUF).label) }
     var touched by remember { mutableStateOf(initial != null) }
     var ruleKey by remember {
-        mutableStateOf(if (initial == null) "" else data.rules.lastOrNull { it.income == initial.income && it.key.isNotBlank() && initial.title.lowercase().contains(it.key) }?.key ?: "")
+        mutableStateOf(if (initial == null) "" else Receipts.bestRule(data.rules, initial.title, initial.income)?.key ?: "")
     }
     var ruleTouched by remember { mutableStateOf(false) }
     var applyAll by remember { mutableStateOf(false) }
@@ -245,7 +245,7 @@ private fun EntryDialog(
                 } else {
                     CategoryField("Kategorie (z. B. Einkauf, Hobby)", cat, data.expenseCategories().map { it.label }) { cat = it; touched = true; if (!ruleTouched && ruleKey.isBlank()) ruleKey = Receipts.keyOf(title) }
                 }
-                RuleField(ruleKey, { ruleKey = it; ruleTouched = true }, applyAll) { applyAll = it }
+                RuleField(ruleKey, { ruleKey = it; ruleTouched = true }, applyAll, { applyAll = it }, title)
                 PersonChoice(persons, if (income) "Wessen Einnahme?" else "Wer hat gezahlt?", person) { person = it }
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Notiz (optional)") }, modifier = Modifier.fillMaxWidth())
                 if (!isNew && cents != null && cents > 0) {
@@ -306,7 +306,7 @@ private fun RecurringDialog(initial: Recurring?, data: Data, persons: List<Perso
     var cat by remember { mutableStateOf((initial?.category ?: Category.FIXKOSTEN).label) }
     var touched by remember { mutableStateOf(initial != null) }
     var ruleKey by remember {
-        mutableStateOf(if (initial == null) "" else data.rules.lastOrNull { it.income == initial.income && it.key.isNotBlank() && initial.title.lowercase().contains(it.key) }?.key ?: "")
+        mutableStateOf(if (initial == null) "" else Receipts.bestRule(data.rules, initial.title, initial.income)?.key ?: "")
     }
     var ruleTouched by remember { mutableStateOf(false) }
     var applyAll by remember { mutableStateOf(false) }
@@ -357,7 +357,7 @@ private fun RecurringDialog(initial: Recurring?, data: Data, persons: List<Perso
                 } else {
                     CategoryField("Kategorie (z. B. Fixkosten, Strom)", cat, data.expenseCategories().map { it.label }) { cat = it; touched = true; if (!ruleTouched && ruleKey.isBlank()) ruleKey = Receipts.keyOf(title) }
                 }
-                RuleField(ruleKey, { ruleKey = it; ruleTouched = true }, applyAll) { applyAll = it }
+                RuleField(ruleKey, { ruleKey = it; ruleTouched = true }, applyAll, { applyAll = it }, title)
                 PersonChoice(persons, if (income) "Wessen Einnahme?" else "Wer zahlt?", person) { person = it }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Endet am", fontSize = 14.sp, modifier = Modifier.weight(1f))

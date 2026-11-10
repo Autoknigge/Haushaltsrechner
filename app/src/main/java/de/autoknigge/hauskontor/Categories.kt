@@ -24,14 +24,29 @@ import java.time.YearMonth
 
 /** Eigenes Kriterium für die automatische Zuordnung: Taucht der Text im Namen oder Verwendungszweck auf, gilt die Kategorie. */
 @Composable
-fun RuleField(key: String, onKey: (String) -> Unit, applyAll: Boolean, onApplyAll: (Boolean) -> Unit) {
+fun RuleField(key: String, onKey: (String) -> Unit, applyAll: Boolean, onApplyAll: (Boolean) -> Unit, title: String = "", showApply: Boolean = true) {
     OutlinedTextField(
         value = key, onValueChange = onKey, singleLine = true, modifier = Modifier.fillMaxWidth(),
         label = { Text("Künftig automatisch zuordnen, wenn der Text enthält:") },
         trailingIcon = { if (key.isNotEmpty()) TextButton(onClick = { onKey("") }) { Text("✕", fontSize = 16.sp) } }
     )
-    Text("Zum Beispiel ein Name, eine Kundennummer oder ein Teil des Verwendungszwecks. Leer lassen = nichts merken.", fontSize = 12.sp)
-    if (key.isNotBlank()) {
+    val toks = Receipts.tokens(title)
+    if (toks.isNotEmpty()) {
+        Text("Bausteine antippen, um sie dem Kriterium hinzuzufügen oder zu entfernen:", fontSize = 12.sp)
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val have = key.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+            toks.forEach { tk ->
+                val on = tk.lowercase() in have
+                androidx.compose.material3.FilterChip(
+                    colors = chipColors(), selected = on,
+                    onClick = { onKey(if (on) have.filter { it != tk.lowercase() }.joinToString(" ") else (have + tk.lowercase()).joinToString(" ")) },
+                    label = { Text(tk, fontSize = 12.sp) }
+                )
+            }
+        }
+    }
+    Text("Mehrere Teile müssen alle vorkommen. „karl meyer 123“ trifft also nicht „Karl Meyer 345“. Ein Teil allein (z. B. „123“) trifft alle mit dieser Nummer. Leer lassen = nichts merken.", fontSize = 12.sp)
+    if (showApply && key.isNotBlank()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = applyAll, onCheckedChange = onApplyAll)
             Text("Auch vorhandene Buchungen mit diesem Text umstellen", fontSize = 13.sp)
@@ -75,7 +90,7 @@ fun CategoryYearDialog(vm: MainViewModel, year: Int, label: String, income: Bool
     edit?.let { l ->
         var t by remember(l) { mutableStateOf(l.title) }
         var c by remember(l) { mutableStateOf(label) }
-        var k by remember(l) { mutableStateOf(vm.data.rules.lastOrNull { it.income == income && it.key.isNotBlank() && l.title.lowercase().contains(it.key) }?.key ?: "") }
+        var k by remember(l) { mutableStateOf(Receipts.bestRule(vm.data.rules, l.title, income)?.key ?: "") }
         var ap by remember(l) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { edit = null },
@@ -87,7 +102,7 @@ fun CategoryYearDialog(vm: MainViewModel, year: Int, label: String, income: Bool
                         if (income) "Kategorie der Einnahme" else "Kategorie", c,
                         if (income) vm.data.incomeCategories().map { it.label } else vm.data.expenseCategories().map { it.label }
                     ) { c = it; if (k.isBlank()) k = Receipts.keyOf(t) }
-                    RuleField(k, { k = it }, ap) { ap = it }
+                    RuleField(k, { k = it }, ap, { ap = it }, t)
                     if (l.fixed) Text("Löschen entfernt die regelmäßige Zahlung mit allen Terminen.", fontSize = 12.sp)
                 }
             },

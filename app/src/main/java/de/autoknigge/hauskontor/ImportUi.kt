@@ -109,7 +109,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
         else {
             var t by remember(i) { mutableStateOf(r.title) }
             var c by remember(i) { mutableStateOf(r.cat) }
-            var k by remember(i) { mutableStateOf(r.rule.ifBlank { Receipts.keyOf(r.title) }) }
+            var k by remember(i) { mutableStateOf(r.rule.ifBlank { Receipts.bestRule(vm.data.rules, r.title, r.income)?.key ?: Receipts.keyOf(r.title) }) }
             AlertDialog(
                 containerColor = Panel, textContentColor = Color.White, titleContentColor = Gold,
                 onDismissRequest = { editing = null },
@@ -118,13 +118,12 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Text") }, modifier = Modifier.fillMaxWidth())
                         CategoryField(if (r.income) "Kategorie der Einnahme" else "Kategorie", c.label, (if (r.income) vm.data.incomeCategories().map { it.label } else vm.data.expenseCategories().map { it.label })) { c = Category(it) }
-                        OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Künftig automatisch zuordnen, wenn der Text enthält") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        Text("Das kann ein Name, eine Kundennummer oder ein Teil des Verwendungszwecks sein. Leer lassen = nichts merken.", fontSize = 12.sp)
+                        RuleField(k, { k = it }, false, {}, t, showApply = false)
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        val same = rows.indices.filter { j -> j != i && k.isNotBlank() && rows[j].title.lowercase().contains(k.trim().lowercase()) }
+                        val same = rows.indices.filter { j -> j != i && k.isNotBlank() && Receipts.matches(k, rows[j].title) }
                         rows[i] = r.copy(title = t, cat = Category(c.label.trim().ifBlank { Category.SONSTIGES.label }), rule = k.trim())
                         same.filter { j -> rows[j].income == r.income }.forEach { j -> rows[j] = rows[j].copy(cat = c) }
                         editing = null

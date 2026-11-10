@@ -89,7 +89,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Wendet eine Regel auf alles Vorhandene an: Text enthält das Stichwort. */
     fun applyRule(r: Rule) {
         val k = r.key.lowercase()
-        fun hit(t: String, inc: Boolean) = inc == r.income && k.isNotBlank() && t.lowercase().contains(k)
+        fun hit(t: String, inc: Boolean) = inc == r.income && Receipts.matches(k, t)
         commit(
             data.copy(
                 entries = data.entries.map { if (hit(it.title, it.income)) (if (r.income) it.copy(incomeKind = IncomeKind(r.category)) else it.copy(category = Category(r.category))) else it },

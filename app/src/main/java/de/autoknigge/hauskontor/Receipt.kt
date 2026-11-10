@@ -165,7 +165,7 @@ object Receipts {
     /** Zuordnung einer Kategorie: zuerst die gelernten Regeln, dann grobe Stichwörter. */
     fun guessCategory(title: String, rules: List<Rule> = emptyList()): Category {
         val t = title.lowercase()
-        rules.lastOrNull { !it.income && it.key.isNotBlank() && t.contains(it.key.lowercase()) }?.let { return Category(it.category) }
+        bestRule(rules, title, false)?.let { return Category(it.category) }
         return when {
             listOf("versicherung", "allianz", "huk", "axa", "ergo").any { t.contains(it) } -> Category.VERSICHERUNG
             listOf("grundsteuer", "müll", "abwasser", "stadtwerke", "schornstein", "wasser", "strom", "energie", "heizung", "fernwärme", "erdgas").any { t.contains(it) } -> Category.NEBENKOSTEN
@@ -178,7 +178,7 @@ object Receipts {
     /** Einnahme-Kategorie: zuerst gelernte Regeln, dann Stichwörter. */
     fun guessIncome(title: String, rules: List<Rule> = emptyList()): IncomeKind {
         val t = title.lowercase()
-        rules.lastOrNull { it.income && it.key.isNotBlank() && t.contains(it.key.lowercase()) }?.let { return IncomeKind(it.category) }
+        bestRule(rules, title, true)?.let { return IncomeKind(it.category) }
         return when {
             listOf("kindergeld", "familienkasse").any { t.contains(it) } -> IncomeKind.KINDERGELD
             listOf("gehalt", "lohn", "bezüge", "besoldung").any { t.contains(it) } -> IncomeKind.LOHN
@@ -189,9 +189,35 @@ object Receipts {
         }
     }
 
-    private val generic = setOf("lastschrift", "gutschrift", "überweisung", "ueberweisung", "dauerauftrag", "kartenzahlung", "sepa", "basislastschrift", "folgelastschrift", "entgelt", "abschluss", "referenz", "mandat", "rechnung", "zahlung", "gmbh", "ihre")
+    private val generic = setOf(
+        "lastschrift", "gutschrift", "überweisung", "ueberweisung", "übertrag", "dauerauftrag", "kartenzahlung", "sepa", "basislastschrift",
+        "folgelastschrift", "entgelt", "abschluss", "referenz", "mandat", "rechnung", "zahlung", "gmbh", "ihre", "belastung", "umbuchung",
+        "eingang", "ausgang", "end-to-end-ref", "mandatsref", "core", "und", "der", "die", "das", "von", "für", "bei"
+    )
 
-    /** Vorschlag für ein Stichwort aus dem Buchungstext: das längste Wort ohne Zahlen, das nicht allgemein ist. */
-    fun keyOf(title: String): String =
-        title.lowercase().split(Regex("[^a-zäöüß]+")).filter { it.length >= 3 && it !in generic }.maxByOrNull { it.length } ?: ""
+    /** Bausteine eines Buchungstextes zum Antippen: Wörter und Nummern. */
+    fun tokens(title: String): List<String> =
+        title.split(Regex("[\\s/,;:|]+")).map { it.trim('.', '-', '+', '(', ')') }
+            .filter { it.length >= 3 && it.lowercase() !in generic && it.any { c -> c.isLetterOrDigit() } }
+            .distinctBy { it.lowercase() }.take(14)
+
+    /** Vorschlag für das Kriterium: die ersten beiden Namenswörter, meist der Absender. Nummern fügt man bei Bedarf selbst hinzu. */
+    fun keyOf(title: String): String {
+        val words = title.lowercase().split(Regex("[^a-zäöüß]+")).filter { it.length >= 3 && it !in generic }
+        return words.take(2).joinToString(" ")
+    }
+
+    private fun terms(key: String): List<String> = key.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+
+    /** Das Kriterium trifft, wenn alle seine Teile im Text vorkommen ("karl meyer 123" trifft nicht "Karl Meyer 345"). */
+    fun matches(key: String, title: String): Boolean {
+        val ts = terms(key)
+        val t = title.lowercase()
+        return ts.isNotEmpty() && ts.all { t.contains(it) }
+    }
+
+    /** Die passendste Regel: je mehr Teile, desto genauer; bei Gleichstand die neuere. */
+    fun bestRule(rules: List<Rule>, title: String, income: Boolean): Rule? =
+        rules.withIndex().filter { it.value.income == income && matches(it.value.key, title) }
+            .maxWithOrNull(compareBy({ terms(it.value.key).size }, { it.value.key.length }, { it.index }))?.value
 }
