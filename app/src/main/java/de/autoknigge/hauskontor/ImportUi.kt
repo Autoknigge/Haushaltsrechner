@@ -116,7 +116,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                 title = { Text("Zahlung bearbeiten") },
                 text = {
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Text") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Bezeichnung (Absender, Verwendungszweck, Nummern)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
                         CategoryField(if (r.income) "Kategorie der Einnahme" else "Kategorie", c.label, (if (r.income) vm.data.incomeCategories().map { it.label } else vm.data.expenseCategories().map { it.label })) { c = Category(it) }
                         RuleField(k, { k = it }, false, {}, t, showApply = false)
                     }
@@ -207,7 +207,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(checked = r.checked, onCheckedChange = { rows[i] = r.copy(checked = it) })
                                 Column(Modifier.weight(1f).clickable { editing = i }) {
-                                    Text(r.title.ifBlank { "(ohne Text)" }, fontSize = 13.sp, maxLines = 2)
+                                    Text(r.title.ifBlank { "(ohne Text)" }, fontSize = 13.sp, maxLines = 3)
                                     Text(Calc.dateText(r.found.date) + (if (r.dup) " · schon vorhanden (gleiches Datum und gleicher Betrag, wird nicht doppelt gezählt)" else ""), fontSize = 11.sp, color = Color(0xFFD6E4DD))
                                     Text("→ " + r.cat.label + "  ✎", fontSize = 12.sp, color = Gold)
                                 }
@@ -222,7 +222,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                                 val a = Receipts.amountIn(row)
                                 if (a != null) Row(Modifier.fillMaxWidth().clickable {
                                     val day = rows.lastOrNull()?.found?.date ?: defaultDay
-                                    val f = Found(day, a.third.take(90), a.first, a.second)
+                                    val f = Found(day, a.third.take(160), a.first, a.second)
                                     rows.add(Row3(f, f.income, true, false, guessFor(f.title, f.income), f.title))
                                     leftovers.remove(row)
                                 }, verticalAlignment = Alignment.CenterVertically) {
@@ -251,6 +251,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                             r.income, "per Foto importiert", payer, if (r.income) IncomeKind(r.cat.label) else null
                         )
                     })
+                    chosen.filter { it.rule.isNotBlank() }.map { Rule(it.rule.trim().lowercase(), it.cat.label, it.income) }.forEach { vm.applyRule(it) }
                     onDone()
                 }) { Text(chosen.size.toString() + " übernehmen") }
             }

@@ -109,18 +109,26 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             }
             Button(onClick = { newRec = true }) { Text("+ Regelmäßige Zahlung oder Einnahme") }
             val sugg = suggestRecurring(d)
+            val skip = remember { androidx.compose.runtime.mutableStateListOf<String>() }
             if (sugg.isNotEmpty()) {
                 HCard("Erkannt: das sieht regelmäßig aus", bg = O6, dark = true) {
-                    Hint("Mehrere gleiche Buchungen im festen Rhythmus. Mit „Übernehmen“ werden die einzelnen Buchungen durch eine regelmäßige Zahlung ersetzt.")
+                    Hint("Mehrere gleiche Buchungen im festen Rhythmus. Haken entfernen, was nicht regelmäßig ist. Beim Übernehmen werden die einzelnen Buchungen durch eine regelmäßige Zahlung ersetzt.")
                     sugg.forEach { s ->
+                        val id = s.key + s.entries.first().income
                         val l = s.entries.last()
-                        Row2(
-                            l.title, (if (l.income) "+ " else "") + Calc.eur(s.cents),
-                            sub = s.interval.label + " · " + s.entries.size + " Buchungen seit " + Calc.dateText(s.entries.first().date),
-                            onClick = { vm.acceptSuggestion(s) }
-                        )
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Checkbox(checked = id !in skip, onCheckedChange = { if (it) skip.remove(id) else skip.add(id) })
+                            Column(Modifier.weight(1f)) {
+                                Text(l.title, fontSize = 13.sp, maxLines = 2, color = LocalInk.current)
+                                Text(s.interval.label + " · " + s.entries.size + " Buchungen seit " + Calc.dateText(s.entries.first().date), fontSize = 11.sp, color = LocalMuted.current)
+                            }
+                            Text((if (l.income) "+ " else "") + Calc.eur(s.cents), fontSize = 13.sp, color = LocalInk.current)
+                        }
                     }
-                    Hint("Antippen übernimmt den Vorschlag.")
+                    val take = sugg.filter { (it.key + it.entries.first().income) !in skip }
+                    TextButton(enabled = take.isNotEmpty(), onClick = { take.forEach { vm.acceptSuggestion(it) } }) {
+                        Text(take.size.toString() + " als regelmäßig übernehmen", color = LocalInk.current)
+                    }
                 }
             }
             if (d.recurrings.isEmpty()) Hint("Noch nichts angelegt. Es gibt Vorlagen wie Grundsteuer, Gebäudeversicherung, Gehalt oder Rente.")
@@ -213,7 +221,7 @@ private fun EntryDialog(
         mutableStateOf(if (initial == null) "" else Receipts.bestRule(data.rules, initial.title, initial.income)?.key ?: "")
     }
     var ruleTouched by remember { mutableStateOf(false) }
-    var applyAll by remember { mutableStateOf(false) }
+    var applyAll by remember { mutableStateOf(true) }
     var income by remember { mutableStateOf(initial?.income ?: false) }
     var kind by remember { mutableStateOf((initial?.incomeKind ?: IncomeKind.LOHN).label) }
     var person by remember { mutableStateOf(initial?.personId) }
@@ -309,7 +317,7 @@ private fun RecurringDialog(initial: Recurring?, data: Data, persons: List<Perso
         mutableStateOf(if (initial == null) "" else Receipts.bestRule(data.rules, initial.title, initial.income)?.key ?: "")
     }
     var ruleTouched by remember { mutableStateOf(false) }
-    var applyAll by remember { mutableStateOf(false) }
+    var applyAll by remember { mutableStateOf(true) }
     var income by remember { mutableStateOf(initial?.income ?: false) }
     var kind by remember { mutableStateOf((initial?.incomeKind ?: IncomeKind.LOHN).label) }
     var person by remember { mutableStateOf(initial?.personId) }

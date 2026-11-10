@@ -91,13 +91,13 @@ fun CategoryYearDialog(vm: MainViewModel, year: Int, label: String, income: Bool
         var t by remember(l) { mutableStateOf(l.title) }
         var c by remember(l) { mutableStateOf(label) }
         var k by remember(l) { mutableStateOf(Receipts.bestRule(vm.data.rules, l.title, income)?.key ?: "") }
-        var ap by remember(l) { mutableStateOf(false) }
+        var ap by remember(l) { mutableStateOf(true) }
         AlertDialog(
             onDismissRequest = { edit = null },
             title = { Text("Zahlung ändern") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Text") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Bezeichnung (Absender, Verwendungszweck, Nummern)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     CategoryField(
                         if (income) "Kategorie der Einnahme" else "Kategorie", c,
                         if (income) vm.data.incomeCategories().map { it.label } else vm.data.expenseCategories().map { it.label }

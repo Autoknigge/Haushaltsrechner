@@ -81,7 +81,7 @@ object Receipts {
             val cents = c.cents
             if (cents != null && cents > 0) {
                 var title = c.parts.joinToString(" ").replace(dateRx, " ").replace(Regex("\\s+"), " ").trim().trim('-', '+', '|').trim()
-                if (title.length > 90) title = title.take(90)
+                if (title.length > 160) title = title.take(160)
                 out.add(Found(c.date, title, cents, c.income))
             }
             cur = null
@@ -126,7 +126,7 @@ object Receipts {
                         continue
                     } else left.add(row)
                 }
-                if (c != null && c.parts.size < 4) c.parts.add(text)
+                if (c != null && c.parts.size < 8) c.parts.add(text)
             }
         }
         finish()
