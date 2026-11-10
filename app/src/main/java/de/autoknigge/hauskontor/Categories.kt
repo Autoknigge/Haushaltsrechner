@@ -88,6 +88,7 @@ fun CategoryYearDialog(vm: MainViewModel, year: Int, label: String, income: Bool
                         if (income) vm.data.incomeCategories().map { it.label } else vm.data.expenseCategories().map { it.label }
                     ) { c = it; if (k.isBlank()) k = Receipts.keyOf(t) }
                     RuleField(k, { k = it }, ap) { ap = it }
+                    if (l.fixed) Text("Löschen entfernt die regelmäßige Zahlung mit allen Terminen.", fontSize = 12.sp)
                 }
             },
             confirmButton = {
@@ -107,7 +108,15 @@ fun CategoryYearDialog(vm: MainViewModel, year: Int, label: String, income: Bool
                     edit = null
                 }) { Text("Speichern") }
             },
-            dismissButton = { TextButton(onClick = { edit = null }) { Text("Abbrechen") } }
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        if (l.fixed) vm.deleteRecurring(l.sourceId) else vm.deleteEntry(l.sourceId)
+                        edit = null
+                    }) { Text(if (l.fixed) "Regelmäßige Zahlung löschen" else "Löschen", color = androidx.compose.material3.MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    TextButton(onClick = { edit = null }) { Text("Abbrechen") }
+                }
+            }
         )
     }
 

@@ -105,7 +105,7 @@ private fun YearView(vm: MainViewModel) {
     }
 
     if (s.byCategory.isNotEmpty()) {
-        HCard("Ausgaben nach Kategorie", bg = O4, dark = true) {
+        HCard("Ausgaben nach Kategorie", bg = O1) {
             val max = s.byCategory.values.maxOrNull() ?: 1L
             s.byCategory.forEach { (cat, c) ->
                 Column(Modifier.clickable { catDialog = cat.label to false }, verticalArrangement = Arrangement.spacedBy(3.dp)) {

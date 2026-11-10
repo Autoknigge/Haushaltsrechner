@@ -43,6 +43,11 @@ val BadRed = Color(0xFF9B1C1C)
 val LocalInk = androidx.compose.runtime.compositionLocalOf { Ink }
 val LocalMuted = androidx.compose.runtime.compositionLocalOf { Muted }
 
+/** Deutlicher Farbverlauf: helle Karten (dunkle Schrift) werden nach unten heller, dunkle Karten (weiße Schrift) nach unten dunkler. */
+fun tileBrush(bg: Color, darkInk: Boolean): Brush =
+    if (darkInk) Brush.linearGradient(listOf(lerp(bg, Color.White, 0.45f), bg))
+    else Brush.linearGradient(listOf(lerp(bg, Color.White, 0.10f), lerp(bg, Color.Black, 0.55f)))
+
 fun cardBrush(start: Color, darken: Float = 0.35f): Brush =
     Brush.linearGradient(listOf(start, lerp(start, Color.Black, darken)))
 

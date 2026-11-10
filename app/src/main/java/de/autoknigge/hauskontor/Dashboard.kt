@@ -76,7 +76,7 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
         }
 
         if (s.byCategory.isNotEmpty()) {
-            HCard("Ausgaben nach Kategorie", bg = O4, dark = true) {
+            HCard("Ausgaben nach Kategorie", bg = O1) {
                 val max = s.byCategory.values.maxOrNull() ?: 1L
                 s.byCategory.forEach { (cat, cents) ->
                     Column(Modifier.clickable { catDialog = cat.label to false }, verticalArrangement = Arrangement.spacedBy(3.dp)) {

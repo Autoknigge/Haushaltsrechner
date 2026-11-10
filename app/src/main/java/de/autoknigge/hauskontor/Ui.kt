@@ -126,7 +126,7 @@ fun HCard(title: String?, modifier: Modifier = Modifier, bg: Color = Panel, dark
     val muted = if (dark) DarkMuted else WarmMuted
     androidx.compose.runtime.CompositionLocalProvider(LocalInk provides ink, LocalMuted provides muted) {
         Column(
-            modifier.fillMaxWidth().clip(shape).background(cardBrush(bg, if (dark) 0.22f else 0.45f)).border(1.dp, Line, shape).padding(14.dp),
+            modifier.fillMaxWidth().clip(shape).background(tileBrush(bg, dark)).border(1.dp, Line, shape).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = ink)
