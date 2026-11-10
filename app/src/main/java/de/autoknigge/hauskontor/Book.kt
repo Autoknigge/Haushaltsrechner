@@ -55,6 +55,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
     var wipeMonth by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var reviewOpen by remember { mutableStateOf(false) }
+    var recMenu by remember { mutableStateOf<Recurring?>(null) }
     val d = vm.data
     val defaultDay = if (YearMonth.from(LocalDate.now()) == ym) LocalDate.now().toEpochDay() else ym.atDay(1).toEpochDay()
     fun who(id: String?) = d.persons.firstOrNull { it.id == id }?.name
@@ -147,7 +148,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
         } else {
             Button(modifier = Modifier.fillMaxWidth(), onClick = { reviewOpen = true }) { Text("🔎 Regelmäßige Zahlungen finden") }
             MonthBar(ym, onMonth)
-            CashPreview(vm, ym, onMonth)
+            CashPreview(vm, ym, onMonth) { id -> recMenu = d.recurrings.firstOrNull { it.id == id } }
             val exp = d.recurrings.filter { !it.income }.sumOf { Calc.perMonth(it) }
             val inc = d.recurrings.filter { it.income }.sumOf { Calc.perMonth(it) }
             HCard("Regelmäßige Zahlungen und Einnahmen", bg = TileToday) {
@@ -189,7 +190,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                         if (r.income) IncomeGreen else androidx.compose.ui.graphics.Color.Unspecified,
                         sub = r.interval.label + " · " + (if (r.income) (r.incomeKind ?: IncomeKind.SONSTIGES).label else r.category.label) +
                             (who(r.personId)?.let { " · $it" } ?: "") + " · ab " + Calc.dateText(r.start) + (r.end?.let { " bis " + Calc.dateText(it) } ?: ""),
-                        onClick = { recDialog = r }
+                        onClick = { recMenu = r }
                     )
                 }
                 partnersFor(d.recurrings.filter { !it.income }.map { it.title to it.category }).forEach { PartnerButton(it) }
@@ -224,6 +225,26 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             onRule = { r, ap -> vm.learn(listOf(r)); if (ap) vm.applyRule(r) },
             onDelete = { recDialog?.let { r -> vm.deleteRecurring(r.id) }; newRec = false; recDialog = null },
             onDismiss = { newRec = false; recDialog = null }
+        )
+    }
+    recMenu?.let { r ->
+        AlertDialog(
+            onDismissRequest = { recMenu = null },
+            title = { Text(r.title.ifBlank { "Regelmäßige Zahlung" }) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text((if (r.income) "+ " else "") + Calc.eur(r.cents) + " · " + r.interval.label + " · ab " + Calc.dateText(r.start), fontSize = 13.sp)
+                    TextButton(onClick = { recDialog = r; recMenu = null }) { Text("✏️ Ändern") }
+                    TextButton(onClick = {
+                        vm.deleteRecurring(r.id)
+                        vm.dismissGroup(groupKey(r.title) + "|" + r.income)
+                        recMenu = null
+                    }) { Text("Aus den regelmäßigen Zahlungen entfernen", color = MaterialTheme.colorScheme.error) }
+                    Text("Deine bisherigen Buchungen bleiben bestehen. Die Zahlung wird nicht mehr als regelmäßig vorgeschlagen.", fontSize = 12.sp)
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { recMenu = null }) { Text("Abbrechen") } }
         )
     }
     if (reviewOpen) RecurringReviewDialog(vm) { reviewOpen = false }

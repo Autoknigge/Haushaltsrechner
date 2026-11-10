@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -26,24 +27,45 @@ import androidx.compose.ui.window.DialogProperties
 import java.time.LocalDate
 import java.time.YearMonth
 
-private fun groupKey(title: String): String = Receipts.keyOf(title).ifBlank { title.lowercase().trim().take(24) }
+fun groupKey(title: String): String = Receipts.keyOf(title).ifBlank { title.lowercase().trim().take(24) }
 
 /** Mehrere Buchungen desselben Zahlers oder Empfängers. */
 class Cand(val key: String, val income: Boolean, val entries: List<Entry>) {
     val last: Entry get() = entries.last()
     val id: String get() = key + "|" + income
 
-    /** Vermuteter Rhythmus aus den Abständen, null bei nur einer Buchung. */
+    /** Abstände in Tagen zwischen den Buchungen. */
+    fun gaps(): List<Int> = entries.zipWithNext { a, b -> (b.date - a.date).toInt() }
+
+    /**
+     * Vermuteter Rhythmus: Jeder Abstand wird dem nächsten Rhythmus (30, 91, 182, 365 Tage) zugeordnet, auch wenn Monate fehlen
+     * (60 Tage = zwei Monate). Der häufigste Rhythmus gewinnt. Null bei nur einer Buchung oder ohne erkennbares Muster.
+     */
     fun guess(): Interval? {
-        if (entries.size < 2) return null
-        val gaps = entries.zipWithNext { a, b -> (b.date - a.date).toInt() }.sorted()
-        val med = gaps[gaps.size / 2]
-        return when {
-            med <= 40 -> Interval.MONTHLY
-            med <= 105 -> Interval.QUARTERLY
-            med <= 200 -> Interval.HALF
-            else -> Interval.YEARLY
+        val g = gaps()
+        if (g.isEmpty()) return null
+        val votes = HashMap<Interval, Int>()
+        g.forEach { d ->
+            val best = Interval.values().minByOrNull { iv ->
+                val base = iv.months * 30.4
+                val k = Math.max(1.0, Math.round(d / base).toDouble())
+                Math.abs(d - k * base) / (k * base) + (k - 1) * 0.02
+            }
+            if (best != null) {
+                val base = best.months * 30.4
+                val k = Math.max(1.0, Math.round(d / base).toDouble())
+                if (Math.abs(d - k * base) / (k * base) < 0.2) votes[best] = (votes[best] ?: 0) + 1
+            }
         }
+        return votes.maxByOrNull { it.value }?.key
+    }
+
+    /** Kurze Begründung für die Anzeige. */
+    fun why(): String {
+        val g = gaps()
+        if (g.isEmpty()) return "Nur eine Buchung, Rhythmus bitte selbst wählen."
+        val iv = guess() ?: return "Abstände unregelmäßig (" + g.takeLast(4).joinToString(", ") + " Tage), Rhythmus bitte selbst wählen."
+        return "Erkannt: " + iv.label + " (Abstände " + g.takeLast(4).joinToString(", ") + " Tage)"
     }
 }
 
@@ -90,17 +112,15 @@ fun RecurringReviewDialog(vm: MainViewModel, onDismiss: () -> Unit) {
                             sub = "zuletzt " + Calc.dateText(l.date) + " · " + c.entries.size + " Buchung" + (if (c.entries.size == 1) "" else "en") + range
                         )
                         val g = c.guess()
+                        Text(c.why(), fontSize = 12.sp, color = LocalMuted.current)
+                        fun make(iv: Interval) = vm.saveRecurring(
+                            Recurring(vm.newId(), l.title, l.cents, l.category, iv, nextDue(l.date, iv), null, l.note, l.income, l.incomeKind, l.personId)
+                        )
+                        if (g != null) Button(modifier = Modifier.fillMaxWidth(), onClick = { make(g) }) { Text("✓ " + g.label + " übernehmen") }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Interval.values().forEach { iv ->
-                                FilterChip(
-                                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(labelColor = LocalInk.current, selectedLabelColor = Forest, selectedContainerColor = Gold), selected = g == iv,
-                                    onClick = {
-                                        vm.saveRecurring(
-                                            Recurring(vm.newId(), l.title, l.cents, l.category, iv, nextDue(l.date, iv), null, l.note, l.income, l.incomeKind, l.personId)
-                                        )
-                                    },
-                                    label = { Text(iv.label, fontSize = 13.sp) }
-                                )
+                            if (g != null) Text("anders:", fontSize = 12.sp, color = LocalMuted.current, modifier = Modifier.padding(top = 10.dp))
+                            Interval.values().filter { it != g }.forEach { iv ->
+                                androidx.compose.material3.AssistChip(onClick = { make(iv) }, label = { Text(iv.label, fontSize = 13.sp) })
                             }
                             OutlinedButton(onClick = { vm.dismissGroup(c.id) }) { Text("Nein", color = LocalInk.current) }
                         }
@@ -118,7 +138,7 @@ private fun sgn(c: Long): String = (if (c > 0) "+ " else if (c < 0) "− " else 
 
 /** Geld-Vorschau: welche regelmäßigen Zahlungen kommen wann, und wie viel muss dafür auf dem Konto sein. */
 @Composable
-fun CashPreview(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
+fun CashPreview(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit, onRecurring: (String) -> Unit = {}) {
     val d = vm.data
     val fixed = Calc.monthLines(d, ym).filter { it.fixed }.sortedBy { it.date }
 
@@ -148,7 +168,8 @@ fun CashPreview(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                 Row2(
                     String.format("%02d.%02d. ", l.date.dayOfMonth, l.date.monthValue) + l.title.ifBlank { l.category.label },
                     (if (l.income) "+ " else "− ") + Calc.eur(l.cents),
-                    sub = "danach gegenüber Monatsbeginn: " + sgn(bal)
+                    sub = "danach gegenüber Monatsbeginn: " + sgn(bal),
+                    onClick = { onRecurring(l.sourceId) }
                 )
             }
         }
