@@ -53,6 +53,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
     var newRec by remember { mutableStateOf(false) }
     var importOpen by remember { mutableStateOf(false) }
     var wipeMonth by remember { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     val d = vm.data
     val defaultDay = if (YearMonth.from(LocalDate.now()) == ym) LocalDate.now().toEpochDay() else ym.atDay(1).toEpochDay()
     fun who(id: String?) = d.persons.firstOrNull { it.id == id }?.name
@@ -64,6 +65,51 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
         }
 
         if (sub == 0) {
+            androidx.compose.material3.OutlinedTextField(
+                value = query, onValueChange = { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                label = { Text("🔍 Suchen: Name, Betrag, Kategorie, Datum …") },
+                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕", fontSize = 16.sp) } }
+            )
+        }
+
+        if (sub == 0 && query.isNotBlank()) {
+            val terms = query.lowercase().replace("€", " ").split(Regex("\\s+")).filter { it.isNotBlank() }
+            fun hit(title: String, note: String, cat: String, person: String?, cents: Long, day: Long): Boolean {
+                val hay = (title + " " + note + " " + cat + " " + (person ?: "") + " " + Calc.dateText(day) + " " + Calc.centsText(cents)).lowercase()
+                return terms.all { hay.contains(it) }
+            }
+            val found = d.entries.filter {
+                hit(it.title, it.note, if (it.income) (it.incomeKind ?: IncomeKind.SONSTIGES).label else it.category.label, who(it.personId), it.cents, it.date)
+            }.sortedByDescending { it.date }
+            val foundRec = d.recurrings.filter {
+                hit(it.title, it.note, if (it.income) (it.incomeKind ?: IncomeKind.SONSTIGES).label else it.category.label, who(it.personId), it.cents, it.start)
+            }
+            val exp = found.filter { !it.income }.sumOf { it.cents }
+            val inc = found.filter { it.income }.sumOf { it.cents }
+            Hint(found.size.toString() + " Buchungen" + (if (foundRec.isNotEmpty()) " und " + foundRec.size + " regelmäßige Zahlungen" else "") + " · Ausgaben " + Calc.eur(exp) + " · Einnahmen " + Calc.eur(inc))
+            if (found.isEmpty() && foundRec.isEmpty()) Hint("Nichts gefunden.")
+            if (found.isNotEmpty()) HCard(null, bg = O9, dark = true) {
+                found.take(300).forEach { e ->
+                    Row2(
+                        e.title.ifBlank { e.category.label },
+                        (if (e.income) "+ " else "") + Calc.eur(e.cents),
+                        if (e.income) IncomeGreen else androidx.compose.ui.graphics.Color.Unspecified,
+                        sub = Calc.dateText(e.date) + " · " + (if (e.income) (e.incomeKind ?: IncomeKind.SONSTIGES).label else e.category.label) + (who(e.personId)?.let { " · $it" } ?: ""),
+                        onClick = { entryDialog = e }
+                    )
+                }
+                if (found.size > 300) Hint("Es werden die 300 neuesten angezeigt. Suche genauer, um die übrigen zu sehen.")
+            }
+            if (foundRec.isNotEmpty()) HCard("Regelmäßig", bg = O8, dark = true) {
+                foundRec.forEach { r ->
+                    Row2(
+                        r.title, (if (r.income) "+ " else "") + Calc.eur(r.cents),
+                        sub = r.interval.label + " · seit " + Calc.dateText(r.start) + " · " + (if (r.income) (r.incomeKind ?: IncomeKind.SONSTIGES).label else r.category.label),
+                        onClick = { sub = 1; recDialog = r }
+                    )
+                }
+            }
+        } else if (sub == 0) {
             MonthBar(ym, onMonth)
             val lines = Calc.monthLines(d, ym)
             val s = Calc.sum(lines)
