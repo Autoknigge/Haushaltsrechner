@@ -66,6 +66,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
     var payer by remember { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf<Long?>(null) }
     val rows = remember { mutableListOf<Row3>().toMutableStateList() }
+    val leftovers = remember { mutableListOf<String>().toMutableStateList() }
     val persons = vm.data.persons
     var editing by remember { mutableStateOf<Int?>(null) }
 
@@ -81,7 +82,9 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
             rows.clear()
             if (s == null || s.rows.isEmpty()) failed = true
             else {
-                val found = Receipts.statement(s.rows)
+                val (found, rest) = Receipts.statementFull(s.rows)
+                leftovers.clear()
+                leftovers.addAll(rest)
                 val have = vm.data.entries
                 found.forEach { f ->
                     val dup = have.any { it.date == f.date && it.cents == f.cents }
@@ -160,6 +163,16 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                     }
                 }
 
+                if (scan != null) {
+                    TextButton(onClick = {
+                        val i = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TEXT, scan!!.rows.joinToString("\n"))
+                        }
+                        ctx.startActivity(android.content.Intent.createChooser(i, "Erkannten Text teilen"))
+                    }) { Text("Erkannten Text teilen (zur Fehlersuche)", fontSize = 12.sp) }
+                }
+
                 if (scan != null && !failed && !statementMode) {
                     val g = guess
                     if (g == null || g.amounts.isEmpty()) {
@@ -203,6 +216,21 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                             }
                         }
                         Hint("Tippe auf eine Zeile, um Text oder Kategorie zu ändern. Die App merkt sich die Zuordnung für den nächsten Scan.")
+                        if (leftovers.isNotEmpty()) {
+                            Text("Weitere Zeilen mit Betrag (keiner Buchung zugeordnet). Tippen fügt sie als Zahlung hinzu:", fontSize = 12.sp)
+                            leftovers.toList().forEach { row ->
+                                val a = Receipts.amountIn(row)
+                                if (a != null) Row(Modifier.fillMaxWidth().clickable {
+                                    val day = rows.lastOrNull()?.found?.date ?: defaultDay
+                                    val f = Found(day, a.third.take(90), a.first, a.second)
+                                    rows.add(Row3(f, f.income, true, false, guessFor(f.title, f.income), f.title))
+                                    leftovers.remove(row)
+                                }, verticalAlignment = Alignment.CenterVertically) {
+                                    Text("＋ " + a.third.ifBlank { "(ohne Text)" }, fontSize = 12.5.sp, color = Gold, modifier = Modifier.weight(1f), maxLines = 2)
+                                    Text((if (a.second) "+ " else "− ") + Calc.eur(a.first), fontSize = 12.5.sp)
+                                }
+                            }
+                        }
                         if (persons.isNotEmpty()) {
                             Text("Wer hat gezahlt (für alle gewählten)?", fontSize = 12.sp)
                             Choice<String?>(listOf<String?>(null) + persons.map { it.id }, payer, { id -> persons.firstOrNull { it.id == id }?.name ?: "Gemeinsam" }) { payer = it }

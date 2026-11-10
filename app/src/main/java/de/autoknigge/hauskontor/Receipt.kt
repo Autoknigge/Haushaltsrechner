@@ -38,10 +38,22 @@ object Receipts {
      * Zahlungen aus den Zeilen eines Kontoauszugs. Eine Zeile mit Datum am Anfang beginnt eine neue Buchung.
      * Folgezeilen ohne Datum (Verwendungszweck) gehören dazu; steht der Betrag erst dort, wird er dort gelesen.
      */
-    fun statement(rows: List<String>, today: LocalDate = LocalDate.now()): List<Found> {
+    fun statement(rows: List<String>, today: LocalDate = LocalDate.now()): List<Found> = statementFull(rows, today).first
+
+    /** Betrag in einer Zeile: Cent, Einnahme, Rest des Textes. */
+    fun amountIn(row: String): Triple<Long, Boolean, String>? {
+        val am = amountRx(true).find(row) ?: return null
+        val sign = am.groupValues[1] + am.groupValues[4]
+        return Triple(toCents(am.groupValues[2], am.groupValues[3]), sign.contains('+') || sign.contains('H'), row.replace(am.value, " ").replace(dateRx, " ").replace(Regex("\\s+"), " ").trim())
+    }
+
+    /** Wie [statement], liefert aber zusätzlich die Zeilen mit Betrag, die keiner Buchung zugeordnet werden konnten. */
+    fun statementFull(rows: List<String>, today: LocalDate = LocalDate.now()): Pair<List<Found>, List<String>> {
         class Cur(val date: Long, val parts: MutableList<String>, var cents: Long? = null, var income: Boolean = false)
         val out = ArrayList<Found>()
         val rx = amountRx(true)
+        val left = ArrayList<String>()
+        var pending: Pair<Long, Boolean>? = null
         var cur: Cur? = null
         fun finish() {
             val c = cur ?: return
@@ -68,23 +80,33 @@ object Receipts {
                     c.income = sign.contains('+') || sign.contains('H')
                     c.cents = toCents(am.groupValues[2], am.groupValues[3])
                     text = text.replace(am.value, " ")
-                }
+                } else pending?.let { c.cents = it.first; c.income = it.second }
+                pending = null
                 c.parts.add(text.replace(dm.value, " "))
                 cur = c
             } else {
-                val c = cur ?: continue
+                val c = cur
                 var text = row
-                if (am != null && c.cents == null) {
+                if (am != null) {
                     val sign = am.groupValues[1] + am.groupValues[4]
-                    c.income = sign.contains('+') || sign.contains('H')
-                    c.cents = toCents(am.groupValues[2], am.groupValues[3])
-                    text = text.replace(am.value, " ")
+                    val inc = sign.contains('+') || sign.contains('H')
+                    val cents = toCents(am.groupValues[2], am.groupValues[3])
+                    val rest = text.replace(am.value, " ")
+                    if (c != null && c.cents == null) {
+                        c.income = inc
+                        c.cents = cents
+                        text = rest
+                    } else if (rest.count { it.isLetter() } < 3) {
+                        // Betrag steht allein in einer Zeile: gehört vermutlich zur nächsten Buchung.
+                        pending = cents to inc
+                        continue
+                    } else left.add(row)
                 }
-                if (c.parts.size < 4) c.parts.add(text)
+                if (c != null && c.parts.size < 4) c.parts.add(text)
             }
         }
         finish()
-        return out.distinct()
+        return out.distinct() to left
     }
 
     private val keywords = listOf("summe", "gesamt", "total", "zu zahlen", "endbetrag", "rechnungsbetrag", "brutto", "betrag", "bar", "visa", "ec")
