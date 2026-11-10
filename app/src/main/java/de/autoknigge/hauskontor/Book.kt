@@ -52,6 +52,7 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
     var recDialog by remember { mutableStateOf<Recurring?>(null) }
     var newRec by remember { mutableStateOf(false) }
     var importOpen by remember { mutableStateOf(false) }
+    var wipeMonth by remember { mutableStateOf(false) }
     val d = vm.data
     val defaultDay = if (YearMonth.from(LocalDate.now()) == ym) LocalDate.now().toEpochDay() else ym.atDay(1).toEpochDay()
     fun who(id: String?) = d.persons.firstOrNull { it.id == id }?.name
@@ -78,6 +79,10 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
                 OutlinedButton(onClick = { importOpen = true }) { Text("📷 Beleg / Kontoauszug") }
             }
             if (lines.isEmpty()) Hint("Keine Buchungen in diesem Monat.")
+            val monthEntries = d.entries.filter { Calc.day(it.date).let { x -> YearMonth.from(x) == ym } }
+            if (monthEntries.isNotEmpty()) TextButton(onClick = { wipeMonth = true }) {
+                Text("🗑 Buchungen dieses Monats löschen …", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            }
             HCard(null, bg = O9, dark = true) {
                 lines.forEach { l ->
                     val entry = if (l.fixed) null else d.entries.firstOrNull { it.id == l.sourceId }
@@ -161,6 +166,27 @@ fun BookScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             onRule = { r, ap -> vm.learn(listOf(r)); if (ap) vm.applyRule(r) },
             onDelete = { recDialog?.let { r -> vm.deleteRecurring(r.id) }; newRec = false; recDialog = null },
             onDismiss = { newRec = false; recDialog = null }
+        )
+    }
+    if (wipeMonth) {
+        val inMonth = d.entries.filter { YearMonth.from(Calc.day(it.date)) == ym }
+        val imported = inMonth.count { it.note == "per Foto importiert" }
+        AlertDialog(
+            onDismissRequest = { wipeMonth = false },
+            title = { Text("Buchungen löschen · " + Calc.monthText(ym)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("In diesem Monat gibt es " + inMonth.size + " einzelne Buchungen, davon " + imported + " per Foto oder PDF importiert. Regelmäßige Zahlungen bleiben bestehen. Das Löschen lässt sich nicht rückgängig machen.", fontSize = 13.sp)
+                    if (imported > 0) TextButton(onClick = { vm.deleteMonth(ym, true); wipeMonth = false }) {
+                        Text("Nur die importierten löschen ($imported)", color = MaterialTheme.colorScheme.error)
+                    }
+                    TextButton(onClick = { vm.deleteMonth(ym, false); wipeMonth = false }) {
+                        Text("Alle " + inMonth.size + " Buchungen löschen", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { wipeMonth = false }) { Text("Abbrechen") } }
         )
     }
     if (importOpen) {

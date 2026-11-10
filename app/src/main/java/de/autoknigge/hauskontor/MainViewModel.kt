@@ -112,6 +112,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         commit(data.copy(entries = data.entries.filter { it.id !in ids }, recurrings = data.recurrings + r))
     }
 
+    /** Löscht die einzelnen Buchungen eines Monats (regelmäßige Zahlungen bleiben). */
+    fun deleteMonth(ym: java.time.YearMonth, onlyImported: Boolean) {
+        val from = ym.atDay(1).toEpochDay()
+        val to = ym.atEndOfMonth().toEpochDay()
+        commit(data.copy(entries = data.entries.filter { !(it.date in from..to && (!onlyImported || it.note == "per Foto importiert")) }))
+    }
+
     fun setSplit(mode: SplitMode) = commit(data.copy(split = mode))
 
     /** Spielt eine Sicherung ein: entweder alles ersetzen oder fehlende Einträge hinzufügen. */
