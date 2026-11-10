@@ -246,18 +246,83 @@ object Ocr {
      * Der Ausschnitt wird in mehreren Bildvarianten gelesen; Treffer, die in mehreren Varianten vorkommen und zum letzten
      * Stand passen (nicht kleiner, nicht unglaublich viel größer), stehen vorn.
      */
+    /** Entfernt Seriennummern (1KFM0000086386, #8723, Server-ID) und OBIS-Kennzahlen aus dem Text, damit sie nicht als Stand gelten. */
+    private fun cleanText(t: String): String = t
+        .replace(Regex("\\b[A-Za-z]{1,6}\\d{5,}\\w*|\\b\\d+[A-Za-z]+\\d{4,}\\w*"), " ")
+        .replace(Regex("#\\s*\\d+"), " ")
+        .replace(Regex("\\b\\d\\.\\d\\.\\d\\b"), " ")
+
+    private fun plausible(c: String): Boolean {
+        val intPart = c.substringBefore('.')
+        if (intPart.length >= 6 && intPart.startsWith("0")) return false
+        if (!c.contains('.') && c.length == 4 && (c.startsWith("19") || c.startsWith("20"))) return false
+        return true
+    }
+
+    /** Sucht das leuchtende LCD-Feld (grün/hell) im Foto und liefert es als Ausschnitt, sonst null. */
+    private fun autoDisplay(src: android.graphics.Bitmap): android.graphics.Bitmap? {
+        val sc = 500f / maxOf(src.width, src.height)
+        val sm = if (sc < 1f) android.graphics.Bitmap.createScaledBitmap(src, (src.width * sc).toInt().coerceAtLeast(1), (src.height * sc).toInt().coerceAtLeast(1), true) else src
+        val w = sm.width
+        val h = sm.height
+        val px = IntArray(w * h)
+        sm.getPixels(px, 0, w, 0, 0, w, h)
+        var x0 = w; var y0 = h; var x1 = -1; var y1 = -1; var n = 0
+        for (y in 0 until h) for (x in 0 until w) {
+            val p = px[y * w + x]
+            val r = p shr 16 and 255; val g = p shr 8 and 255; val b = p and 255
+            if (g > 120 && g > r + 25 && g > b + 50) {
+                n++
+                if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+            }
+        }
+        if (n < w * h * 0.002 || x1 <= x0 || y1 <= y0) return null
+        val mx = ((x1 - x0) * 0.12f).toInt() + 2
+        val my = ((y1 - y0) * 0.25f).toInt() + 2
+        val f = 1f / (if (sc < 1f) sc else 1f)
+        val l = ((x0 - mx).coerceAtLeast(0) * f).toInt()
+        val t = ((y0 - my).coerceAtLeast(0) * f).toInt()
+        val r2 = ((x1 + mx).coerceAtMost(w - 1) * f).toInt().coerceAtMost(src.width)
+        val b2 = ((y1 + my).coerceAtMost(h - 1) * f).toInt().coerceAtMost(src.height)
+        if (r2 - l < 40 || b2 - t < 20) return null
+        return android.graphics.Bitmap.createBitmap(src, l, t, r2 - l, b2 - t)
+    }
+
+    private val kwhRx = Regex("(?i)(\\d[\\d .,]{2,10}?)\\s*k\\s*w\\s*h")
+
+    /**
+     * Zählerstand und Zählernummer aus dem Foto. [crop] ist der gewählte Ausschnitt mit den Ziffern, [full] das ganze Foto.
+     * Ohne Ausschnitt wird das leuchtende Display automatisch gesucht. Seriennummern werden aussortiert, Zahlen direkt vor
+     * "kWh" und hinter 1.8.0 zählen stärker, und der letzte Stand dient als Plausibilitätsprüfung.
+     */
     suspend fun readMeter(full: android.graphics.Bitmap, crop: android.graphics.Bitmap, prev: Double?, decimals: Int): MeterRead {
         val score = LinkedHashMap<String, Double>()
         val texts = ArrayList<String>()
-        for (mode in 0..4) {
-            val b = variant(crop, mode)
-            val sc = recognize(InputImage.fromBitmap(b, 0)) ?: continue
-            texts.add(sc.text)
-            val flat = sc.text.replace('\n', ' ')
-            obisRx.findAll(flat).forEach { m -> val k = withDecimals(m.groupValues[1].replace(',', '.'), decimals); score[k] = (score[k] ?: 0.0) + 3.0 }
-            extract(sc.text).forEachIndexed { i, c ->
-                val k = withDecimals(c, decimals)
-                score[k] = (score[k] ?: 0.0) + 1.0 + (if (i == 0) 0.5 else 0.0)
+        val sources = ArrayList<android.graphics.Bitmap>()
+        if (crop !== full) sources.add(crop)
+        else {
+            autoDisplay(full)?.let { sources.add(it) }
+            sources.add(full)
+        }
+        for ((si, src) in sources.withIndex()) {
+            val weight = if (si == 0) 1.0 else 0.6
+            for (mode in 0..4) {
+                val b = variant(src, mode)
+                val sc = recognize(InputImage.fromBitmap(b, 0)) ?: continue
+                texts.add(sc.text)
+                val flat = cleanText(sc.text.replace('\n', ' '))
+                kwhRx.findAll(flat).forEach { m ->
+                    val c = m.groupValues[1].replace(" ", "").replace(',', '.').trim('.')
+                    if (c.length >= 3 && plausible(c)) { val k = withDecimals(c, decimals); score[k] = (score[k] ?: 0.0) + 4.0 * weight }
+                }
+                obisRx.findAll(sc.text.replace('\n', ' ')).forEach { m ->
+                    val c = m.groupValues[1].replace(',', '.')
+                    if (plausible(c)) { val k = withDecimals(c, decimals); score[k] = (score[k] ?: 0.0) + 3.0 * weight }
+                }
+                extract(flat).filter { plausible(it) }.forEachIndexed { i, c ->
+                    val k = withDecimals(c, decimals)
+                    score[k] = (score[k] ?: 0.0) + (1.0 + (if (i == 0) 0.5 else 0.0)) * weight
+                }
             }
         }
         // Zählernummer aus dem ganzen Foto und den Ausschnitten
