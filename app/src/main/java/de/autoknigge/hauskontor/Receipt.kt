@@ -18,17 +18,26 @@ object Receipts {
 
     private fun toCents(whole: String, dec: String): Long = (whole.replace(".", "").toLongOrNull() ?: 0L) * 100 + (dec.toLongOrNull() ?: 0L)
 
-    private fun toEpoch(d: String, m: String, y: String?, today: LocalDate): Long? = try {
+    private fun toEpoch(d: String, m: String, y: String?, today: LocalDate, hint: Int? = null): Long? = try {
         val year = when {
-            y == null || y.isEmpty() -> today.year
+            y == null || y.isEmpty() -> hint ?: today.year
             y.length == 2 -> 2000 + y.toInt()
             else -> y.toInt()
         }
         var date = LocalDate.of(year, m.toInt(), d.toInt())
-        if ((y == null || y.isEmpty()) && date.isAfter(today.plusDays(7))) date = date.minusYears(1)
+        if ((y == null || y.isEmpty()) && hint == null && date.isAfter(today.plusDays(7))) date = date.minusYears(1)
         date.toEpochDay()
     } catch (e: Exception) {
         null
+    }
+
+    /** Jahr des Auszugs, wenn die Buchungszeilen keins nennen: aus „Auszug 2025“ oder dem häufigsten vollständigen Datum (Zeitraum). */
+    private fun detectYear(rows: List<String>): Int? {
+        val auszug = Regex("(?i)(?:auszug|abrechnung|zeitraum|umsätze).{0,40}?(20\\d{2})")
+        rows.firstNotNullOfOrNull { auszug.find(it)?.groupValues?.get(1)?.toIntOrNull() }?.let { return it }
+        val full = Regex("(?<![\\d.])\\d{1,2}\\.\\d{1,2}\\.(20\\d{2})(?!\\d)")
+        return rows.flatMap { full.findAll(it).map { m -> m.groupValues[1].toInt() }.toList() }
+            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
     }
 
     /** Zeilen mit Salden oder Summen sind keine Zahlungen. */
@@ -60,6 +69,7 @@ object Receipts {
 
     fun statementFull(rowsIn: List<String>, today: LocalDate = LocalDate.now()): Pair<List<Found>, List<String>> {
         val rows = rowsIn.map { normalizeDates(it) }
+        val yearHint = detectYear(rows)
         class Cur(val date: Long, val parts: MutableList<String>, var cents: Long? = null, var income: Boolean = false)
         val out = ArrayList<Found>()
         val rx = amountRx(true)
@@ -83,7 +93,7 @@ object Receipts {
             val startsBooking = dm != null && (dm.range.first <= 3 || am != null)
             if (startsBooking) {
                 finish()
-                val date = toEpoch(dm!!.groupValues[1], dm.groupValues[2], dm.groupValues[3], today) ?: continue
+                val date = toEpoch(dm!!.groupValues[1], dm.groupValues[2], dm.groupValues[3], today, yearHint) ?: continue
                 val c = Cur(date, mutableListOf())
                 var text = row
                 if (am != null) {
