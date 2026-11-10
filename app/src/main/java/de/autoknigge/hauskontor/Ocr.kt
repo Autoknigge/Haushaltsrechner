@@ -58,6 +58,25 @@ object Ocr {
     private suspend fun scanPdf(ctx: Context, uri: Uri): Scan? {
         val tmp = java.io.File(ctx.cacheDir, "import.pdf")
         ctx.contentResolver.openInputStream(uri)?.use { i -> tmp.outputStream().use { i.copyTo(it) } } ?: return null
+        // Digitale PDFs (Online-Kontoauszug) haben eine Textschicht: die ist genauer als Texterkennung.
+        try {
+            com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(ctx)
+            com.tom_roush.pdfbox.pdmodel.PDDocument.load(tmp).use { doc ->
+                if (doc.isEncrypted) doc.isAllSecurityToBeRemoved = true
+                val st = com.tom_roush.pdfbox.text.PDFTextStripper()
+                st.sortByPosition = true
+                val text = st.getText(doc)
+                val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                if (lines.count { Regex("\\d{1,2}\\.\\d{1,2}\\.").containsMatchIn(it) } >= 2) {
+                    tmp.delete()
+                    return Scan(text, lines)
+                }
+            }
+        } catch (e: com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException) {
+            error = "Das PDF ist passwortgeschützt. Speichere es ohne Passwort oder gib es bei der Bank ohne Schutz aus."
+        } catch (e: Throwable) {
+            // weiter mit Texterkennung
+        }
         val rows = ArrayList<String>()
         val text = StringBuilder()
         android.graphics.pdf.PdfRenderer(android.os.ParcelFileDescriptor.open(tmp, android.os.ParcelFileDescriptor.MODE_READ_ONLY)).use { pr ->

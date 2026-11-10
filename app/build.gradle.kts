@@ -96,6 +96,7 @@ dependencies {
 
     // Texterkennung auf dem Gerät (Modell ist in der App enthalten, kein Upload)
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     // Werbung und Einwilligungsabfrage
     implementation("com.google.android.gms:play-services-ads:23.6.0")

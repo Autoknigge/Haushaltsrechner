@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -32,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
@@ -39,6 +41,11 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
+
+@Composable
+fun chipColors() = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+    labelColor = Color.White, selectedLabelColor = Forest, selectedContainerColor = Gold
+)
 
 private data class Row3(val found: Found, val income: Boolean, val checked: Boolean, val dup: Boolean, val cat: Category, val title: String, val rule: String = "")
 
@@ -101,6 +108,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
             var c by remember(i) { mutableStateOf(r.cat) }
             var k by remember(i) { mutableStateOf(r.rule.ifBlank { Receipts.keyOf(r.title) }) }
             AlertDialog(
+                containerColor = Panel, textContentColor = Color.White, titleContentColor = Gold,
                 onDismissRequest = { editing = null },
                 title = { Text("Zahlung bearbeiten") },
                 text = {
@@ -125,29 +133,30 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
     }
 
     AlertDialog(
+        containerColor = Panel, textContentColor = Color.White, titleContentColor = Gold,
         onDismissRequest = onDone,
         title = { Text("Beleg oder Kontoauszug") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Fotografiere eine Rechnung, einen Kassenbon oder einen Kontoauszug oder wähle ein PDF (z. B. Online-Kontoauszug). Die App liest Beträge und Datum und schlägt Buchungen vor. Alles bleibt auf deinem Gerät.", fontSize = 12.5.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp), onClick = {
                         val dir = File(ctx.cacheDir, "aufnahmen").also { it.mkdirs() }
                         val f = File(dir, "b_" + System.currentTimeMillis() + ".jpg")
                         val u = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
                         pending = u
                         take.launch(u)
-                    }) { Text("📷 Foto") }
-                    OutlinedButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("Galerie") }
-                    OutlinedButton(onClick = { pickPdf.launch(arrayOf("application/pdf")) }) { Text("📄 PDF") }
+                    }) { Text("📷 Foto", maxLines = 1, fontSize = 14.sp) }
+                    Button(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp), onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("🖼 Galerie", maxLines = 1, fontSize = 14.sp) }
+                    Button(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp), onClick = { pickPdf.launch(arrayOf("application/pdf")) }) { Text("📄 PDF", maxLines = 1, fontSize = 14.sp) }
                 }
                 if (busy) Text("Text wird gelesen …", fontSize = 13.sp)
                 if (failed) Text(Ocr.error ?: "Es wurde kein Text erkannt. Mache das Foto bei gutem Licht, gerade von oben und möglichst formatfüllend.", fontSize = 12.5.sp)
 
                 if (scan != null && !failed) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = !statementMode, onClick = { statementMode = false }, label = { Text("Rechnung / Beleg") })
-                        FilterChip(selected = statementMode, onClick = { statementMode = true }, label = { Text("Kontoauszug") })
+                        FilterChip(colors = chipColors(), selected = !statementMode, onClick = { statementMode = false }, label = { Text("Rechnung / Beleg") })
+                        FilterChip(colors = chipColors(), selected = statementMode, onClick = { statementMode = true }, label = { Text("Kontoauszug") })
                     }
                 }
 
@@ -159,7 +168,7 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                         Text("Erkannte Beträge (tippe auf den richtigen):", fontSize = 12.sp)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             g.amounts.forEach { c ->
-                                FilterChip(selected = picked == c, onClick = { picked = c }, label = { Text(Calc.eur(c)) })
+                                FilterChip(colors = chipColors(), selected = picked == c, onClick = { picked = c }, label = { Text(Calc.eur(c)) })
                             }
                         }
                         Text(
@@ -186,8 +195,8 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                                 Checkbox(checked = r.checked, onCheckedChange = { rows[i] = r.copy(checked = it) })
                                 Column(Modifier.weight(1f).clickable { editing = i }) {
                                     Text(r.title.ifBlank { "(ohne Text)" }, fontSize = 13.sp, maxLines = 2)
-                                    Text(Calc.dateText(r.found.date) + (if (r.dup) " · schon vorhanden (gleiches Datum und gleicher Betrag, wird nicht doppelt gezählt)" else ""), fontSize = 11.sp)
-                                    Text("→ " + r.cat.label + "  ✎", fontSize = 12.sp)
+                                    Text(Calc.dateText(r.found.date) + (if (r.dup) " · schon vorhanden (gleiches Datum und gleicher Betrag, wird nicht doppelt gezählt)" else ""), fontSize = 11.sp, color = Color(0xFFD6E4DD))
+                                    Text("→ " + r.cat.label + "  ✎", fontSize = 12.sp, color = Gold)
                                 }
                                 Text((if (r.income) "+ " else "− ") + Calc.eur(r.found.cents), fontSize = 13.sp)
                                 TextButton(onClick = { rows[i] = r.copy(income = !r.income, cat = guessFor(r.title, !r.income)) }) { Text("±") }

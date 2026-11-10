@@ -237,7 +237,10 @@ fun CategoryField(label: String, value: String, options: List<String>, onChange:
         value = value, onValueChange = onChange, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
         trailingIcon = { if (value.isNotEmpty()) TextButton(onClick = { onChange("") }) { Text("✕", fontSize = 16.sp) } }
     )
+    val q = value.trim()
+    // Beim Tippen nur passende Vorschläge: erst die mit gleichem Anfang, dann solche, die den Text enthalten.
+    val shown = if (q.isEmpty()) options else options.filter { it.startsWith(q, ignoreCase = true) } + options.filter { !it.startsWith(q, ignoreCase = true) && it.contains(q, ignoreCase = true) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        options.forEach { o -> FilterChip(selected = o.equals(value.trim(), ignoreCase = true), onClick = { onChange(o) }, label = { Text(o) }) }
+        shown.forEach { o -> FilterChip(colors = chipColors(), selected = o.equals(q, ignoreCase = true), onClick = { onChange(o) }, label = { Text(o) }) }
     }
 }

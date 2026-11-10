@@ -32,25 +32,58 @@ object Receipts {
     }
 
     /** Zeilen mit Salden oder Summen sind keine Zahlungen. */
-    private val balanceRx = Regex("saldo|kontostand|anfangsbestand|endbestand|schlusssaldo|übertrag|uebertrag|tagessaldo|summe|umsätze gesamt|guthaben|verfügbar", RegexOption.IGNORE_CASE)
+    private val balanceRx = Regex("saldo|kontostand|anfangsbestand|endbestand|schlusssaldo|übertrag|uebertrag|tagessaldo|summe|umsätze gesamt", RegexOption.IGNORE_CASE)
 
+    /**
+     * Zahlungen aus den Zeilen eines Kontoauszugs. Eine Zeile mit Datum am Anfang beginnt eine neue Buchung.
+     * Folgezeilen ohne Datum (Verwendungszweck) gehören dazu; steht der Betrag erst dort, wird er dort gelesen.
+     */
     fun statement(rows: List<String>, today: LocalDate = LocalDate.now()): List<Found> {
+        class Cur(val date: Long, val parts: MutableList<String>, var cents: Long? = null, var income: Boolean = false)
         val out = ArrayList<Found>()
         val rx = amountRx(true)
+        var cur: Cur? = null
+        fun finish() {
+            val c = cur ?: return
+            val cents = c.cents
+            if (cents != null && cents > 0) {
+                var title = c.parts.joinToString(" ").replace(dateRx, " ").replace(Regex("\\s+"), " ").trim().trim('-', '+', '|').trim()
+                if (title.length > 90) title = title.take(90)
+                out.add(Found(c.date, title, cents, c.income))
+            }
+            cur = null
+        }
         for (row in rows) {
             if (balanceRx.containsMatchIn(row)) continue
-            val dm = dateRx.find(row) ?: continue
-            val date = toEpoch(dm.groupValues[1], dm.groupValues[2], dm.groupValues[3], today) ?: continue
-            val am = rx.findAll(row).firstOrNull { it.range.first > dm.range.last - 1 } ?: rx.find(row) ?: continue
-            val sign = am.groupValues[1] + am.groupValues[4]
-            val income = sign.contains('+') || sign.contains('H')
-            val cents = toCents(am.groupValues[2], am.groupValues[3])
-            if (cents <= 0) continue
-            var title = row.replace(am.value, " ").replace(dm.value, " ")
-            title = title.replace(dateRx, " ").replace(Regex("\\s+"), " ").trim().trim('-', '+', '|').trim()
-            if (title.length > 60) title = title.take(60)
-            out.add(Found(date, title, cents, income))
+            val dm = dateRx.find(row)
+            val am = rx.findAll(row).firstOrNull { dm == null || it.range.first > dm.range.last - 1 } ?: rx.find(row)
+            val startsBooking = dm != null && (dm.range.first <= 3 || am != null)
+            if (startsBooking) {
+                finish()
+                val date = toEpoch(dm!!.groupValues[1], dm.groupValues[2], dm.groupValues[3], today) ?: continue
+                val c = Cur(date, mutableListOf())
+                var text = row
+                if (am != null) {
+                    val sign = am.groupValues[1] + am.groupValues[4]
+                    c.income = sign.contains('+') || sign.contains('H')
+                    c.cents = toCents(am.groupValues[2], am.groupValues[3])
+                    text = text.replace(am.value, " ")
+                }
+                c.parts.add(text.replace(dm.value, " "))
+                cur = c
+            } else {
+                val c = cur ?: continue
+                var text = row
+                if (am != null && c.cents == null) {
+                    val sign = am.groupValues[1] + am.groupValues[4]
+                    c.income = sign.contains('+') || sign.contains('H')
+                    c.cents = toCents(am.groupValues[2], am.groupValues[3])
+                    text = text.replace(am.value, " ")
+                }
+                if (c.parts.size < 4) c.parts.add(text)
+            }
         }
+        finish()
         return out.distinct()
     }
 
