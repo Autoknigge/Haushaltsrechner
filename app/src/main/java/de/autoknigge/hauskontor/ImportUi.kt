@@ -107,8 +107,8 @@ fun ImportDialog(vm: MainViewModel, defaultDay: Long, onDraft: (Entry) -> Unit, 
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("Text") }, modifier = Modifier.fillMaxWidth())
                         CategoryField(if (r.income) "Kategorie der Einnahme" else "Kategorie", c.label, (if (r.income) vm.data.incomeCategories().map { it.label } else vm.data.expenseCategories().map { it.label })) { c = Category(it) }
-                        OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Stichwort merken (z. B. oowv)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        Text("Taucht das Stichwort künftig in einer Zahlung auf, schlägt die App diese Kategorie vor. Leer lassen = nichts merken.", fontSize = 12.sp)
+                        OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Künftig automatisch zuordnen, wenn der Text enthält") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Text("Das kann ein Name, eine Kundennummer oder ein Teil des Verwendungszwecks sein. Leer lassen = nichts merken.", fontSize = 12.sp)
                     }
                 },
                 confirmButton = {

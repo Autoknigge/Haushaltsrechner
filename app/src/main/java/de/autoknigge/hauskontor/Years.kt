@@ -15,6 +15,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -76,7 +79,7 @@ fun YearsScreen(vm: MainViewModel) {
             FilterChip(selected = sub == 2, onClick = { sub = 2 }, label = { Text("Vergleich") })
         }
         when (sub) {
-            0 -> YearView(vm.data)
+            0 -> YearView(vm)
             1 -> MultiYearView(vm.data)
             else -> CompareView(vm.data)
         }
@@ -84,7 +87,9 @@ fun YearsScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun YearView(d: Data) {
+private fun YearView(vm: MainViewModel) {
+    val d = vm.data
+    var catDialog by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var year by rememberSaveable { mutableIntStateOf(LocalDate.now().year) }
     Stepper(year.toString(), { year-- }, { year++ })
     val lines = (1..12).flatMap { Calc.monthLines(d, YearMonth.of(year, it)) }
@@ -94,7 +99,6 @@ private fun YearView(d: Data) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Stat("Ausgaben", Calc.eur(s.expense))
             Stat("Einnahmen", Calc.eur(s.income))
-            Stat("Saldo", (if (s.income - s.expense >= 0) "+ " else "− ") + Calc.eur(Math.abs(s.income - s.expense)))
         }
         Hint("Ø Ausgaben je Monat: " + Calc.eur(s.expense / 12) + (if (s.income > 0) " · Ø Einnahmen: " + Calc.eur(s.income / 12) else ""))
     }
@@ -103,7 +107,7 @@ private fun YearView(d: Data) {
         HCard("Ausgaben nach Kategorie", bg = O4, dark = true) {
             val max = s.byCategory.values.maxOrNull() ?: 1L
             s.byCategory.forEach { (cat, c) ->
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(Modifier.clickable { catDialog = cat.label to false }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(Modifier.fillMaxWidth()) {
                         Text(cat.label, fontSize = 13.sp, color = LocalInk.current, modifier = Modifier.weight(1f))
                         Text(Calc.eur(c) + " · " + (if (s.expense > 0) Math.round(c * 100.0 / s.expense) else 0) + " %", fontSize = 13.sp, color = LocalInk.current)
@@ -118,7 +122,7 @@ private fun YearView(d: Data) {
 
     if (s.incomeByKind.isNotEmpty()) {
         HCard("Einnahmen nach Quelle", bg = CardTeal) {
-            s.incomeByKind.forEach { (k, c) -> Row2(k.label, Calc.eur(c)) }
+            s.incomeByKind.forEach { (k, c) -> Row2(k.label, Calc.eur(c), onClick = { catDialog = k.label to true }) }
         }
     }
 
@@ -137,6 +141,8 @@ private fun YearView(d: Data) {
             }
         }
     }
+
+    catDialog?.let { (lb, inc) -> CategoryYearDialog(vm, year, lb, inc) { catDialog = null } }
 
     if (d.meters.isNotEmpty()) {
         HCard("Verbrauch $year", bg = CardGreen, dark = true) {
@@ -183,8 +189,8 @@ private fun MultiYearView(d: Data) {
             val prev = sums[y - 1]
             Row2(
                 y.toString(),
-                "Saldo " + signed0(s.income - s.expense),
-                sub = "Ausgaben " + e0(s.expense) + " · Einnahmen " + e0(s.income) +
+                e0(s.expense),
+                sub = "Einnahmen " + e0(s.income) +
                     (if (prev != null && prev.expense > 0) " · Ausgaben zum Vorjahr " + signed0(s.expense - prev.expense) + " (" + pct(prev.expense.toDouble(), s.expense.toDouble()) + ")" else "")
             )
         }
@@ -257,7 +263,6 @@ private fun CompareView(d: Data) {
             val y = sb.incomeByKind[k] ?: 0L
             if (x != 0L || y != 0L) CmpRow("  " + k.label, x.toDouble(), y.toDouble(), money, false)
         }
-        CmpRow("Saldo", (sa.income - sa.expense).toDouble(), (sb.income - sb.expense).toDouble(), money, false, true)
         Hint("A und B sind zwei Zeiträume gleicher Länge. Rot heißt: mehr Ausgaben beziehungsweise weniger Einnahmen als in A.")
     }
 

@@ -23,26 +23,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveEntry(e: Entry) {
         commit(data.copy(entries = if (data.entries.any { it.id == e.id }) data.entries.map { if (it.id == e.id) e else it } else data.entries + e))
-        learnFrom(e.title, if (e.income) (e.incomeKind ?: IncomeKind.SONSTIGES).label else e.category.label, e.income)
     }
 
     fun deleteEntry(id: String) = commit(data.copy(entries = data.entries.filter { it.id != id }))
 
     fun saveRecurring(r: Recurring) {
         commit(data.copy(recurrings = if (data.recurrings.any { it.id == r.id }) data.recurrings.map { if (it.id == r.id) r else it } else data.recurrings + r))
-        learnFrom(r.title, if (r.income) (r.incomeKind ?: IncomeKind.SONSTIGES).label else r.category.label, r.income)
     }
 
-    /** Merkt sich, welcher Name zu welcher Kategorie gehört. Gilt, bis du es änderst. */
-    private fun learnFrom(title: String, category: String, income: Boolean) {
-        val key = Receipts.keyOf(title)
-        if (key.length < 3) return
-        val have = data.rules.firstOrNull { it.key == key && it.income == income }
-        val plain = category == Category.SONSTIGES.label || category == IncomeKind.SONSTIGES.label
-        if (have == null && plain) return
-        if (have?.category == category) return
-        learn(listOf(Rule(key, category, income)))
-    }
 
     fun deleteRecurring(id: String) = commit(data.copy(recurrings = data.recurrings.filter { it.id != id }))
 
@@ -88,6 +76,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (new.isEmpty()) return
         val ids = new.map { it.key + it.income }.toSet()
         commit(data.copy(rules = data.rules.filter { (it.key + it.income) !in ids } + new))
+    }
+
+    /** Stellt alle Buchungen und regelmäßigen Zahlungen mit den Kennungen [ids] auf eine neue Kategorie um. */
+    fun recategorize(ids: Set<String>, income: Boolean, label: String) = commit(
+        data.copy(
+            entries = data.entries.map { if (it.id in ids) (if (income) it.copy(incomeKind = IncomeKind(label)) else it.copy(category = Category(label))) else it },
+            recurrings = data.recurrings.map { if (it.id in ids) (if (income) it.copy(incomeKind = IncomeKind(label)) else it.copy(category = Category(label))) else it }
+        )
+    )
+
+    /** Wendet eine Regel auf alles Vorhandene an: Text enthält das Stichwort. */
+    fun applyRule(r: Rule) {
+        val k = r.key.lowercase()
+        fun hit(t: String, inc: Boolean) = inc == r.income && k.isNotBlank() && t.lowercase().contains(k)
+        commit(
+            data.copy(
+                entries = data.entries.map { if (hit(it.title, it.income)) (if (r.income) it.copy(incomeKind = IncomeKind(r.category)) else it.copy(category = Category(r.category))) else it },
+                recurrings = data.recurrings.map { if (hit(it.title, it.income)) (if (r.income) it.copy(incomeKind = IncomeKind(r.category)) else it.copy(category = Category(r.category))) else it }
+            )
+        )
+    }
+
+    /** Macht aus einer Buchung eine regelmäßige Zahlung ab ihrem Datum. */
+    fun entryToRecurring(e: Entry, interval: Interval) {
+        val r = Recurring(newId(), e.title, e.cents, e.category, interval, e.date, null, e.note, e.income, e.incomeKind, e.personId)
+        commit(data.copy(entries = data.entries.filter { it.id != e.id }, recurrings = data.recurrings + r))
+    }
+
+    /** Übernimmt einen erkannten Vorschlag: die einzelnen Buchungen werden durch eine regelmäßige Zahlung ersetzt. */
+    fun acceptSuggestion(s: Suggestion) {
+        val last = s.entries.last()
+        val r = Recurring(newId(), last.title, s.cents, last.category, s.interval, s.entries.first().date, null, last.note, last.income, last.incomeKind, last.personId)
+        val ids = s.entries.map { it.id }.toSet()
+        commit(data.copy(entries = data.entries.filter { it.id !in ids }, recurrings = data.recurrings + r))
     }
 
     fun setSplit(mode: SplitMode) = commit(data.copy(split = mode))

@@ -1,6 +1,11 @@
 package de.autoknigge.hauskontor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +33,7 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
     val d = vm.data
     val lines = Calc.monthLines(d, ym)
     val s = Calc.sum(lines)
+    var catDialog by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
 
     Scroller {
         MonthBar(ym, onMonth)
@@ -36,14 +42,13 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Stat("Ausgaben", Calc.eur(s.expense))
                 Stat("Einnahmen", Calc.eur(s.income))
-                Stat("Saldo", signed(s.income - s.expense))
             }
             if (lines.isEmpty()) Hint("Noch keine Buchungen in diesem Monat. Lege unter „Buch“ Buchungen, Einnahmen und Fixkosten an.")
         }
 
         if (s.incomeByKind.isNotEmpty()) {
             HCard("Einnahmen nach Quelle", bg = CardTeal) {
-                s.incomeByKind.forEach { (k, c) -> Row2(k.label, Calc.eur(c)) }
+                s.incomeByKind.forEach { (k, c) -> Row2(k.label, Calc.eur(c), onClick = { catDialog = k.label to true }) }
                 if (d.persons.isNotEmpty()) {
                     val byPerson = lines.filter { it.income }.groupBy { it.personId }
                     d.persons.forEach { p ->
@@ -73,7 +78,7 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             HCard("Ausgaben nach Kategorie", bg = O4, dark = true) {
                 val max = s.byCategory.values.maxOrNull() ?: 1L
                 s.byCategory.forEach { (cat, cents) ->
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(Modifier.clickable { catDialog = cat.label to false }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(Modifier.fillMaxWidth()) {
                             Text(cat.label, fontSize = 13.sp, color = LocalInk.current, modifier = Modifier.weight(1f))
                             Text(Calc.eur(cents), fontSize = 13.sp, color = LocalInk.current)
@@ -148,5 +153,6 @@ fun DashboardScreen(vm: MainViewModel, ym: YearMonth, onMonth: (Int) -> Unit) {
             Hint("Ausgaben je Monat, einschließlich der fälligen Fixkosten. Der gewählte Monat ist hell.")
         }
         PartnerNote()
+        catDialog?.let { (lb, inc) -> CategoryYearDialog(vm, ym.year, lb, inc) { catDialog = null } }
     }
 }
